@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,6 +30,15 @@ jobs:
         with:
           name: PerfControl-APK
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Publish APK as a release (direct download link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk PerfControl.apk
+          gh release create "v1.0.${{ github.run_number }}" PerfControl.apk \
+            --title "PerfControl v1.0.${{ github.run_number }}" \
+            --notes "ملف التثبيت: PerfControl.apk" --latest
 
       - name: Run unit tests (does not block the APK)
         if: always()
