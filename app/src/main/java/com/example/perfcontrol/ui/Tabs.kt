@@ -80,7 +80,7 @@ fun PerformanceTab(vm: AppViewModel) {
         item {
             stats?.let {
                 val chg = if (it.charging) " (يشحن)" else ""
-                InfoCard("البطارية", "${it.batteryPercent}%$chg\nالحرارة: %.1f °C".format(it.tempC))
+                InfoCard("البطارية", "${it.batteryPercent}%$chg\nالحرارة: ${"%.1f".format(it.tempC)} °C")
             }
         }
         item {

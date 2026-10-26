@@ -5,6 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -38,7 +41,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import com.example.perfcontrol.PerfApp
 import com.example.perfcontrol.core.ShizukuState
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
@@ -48,11 +53,23 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    AppRoot(vm)
+                    var crash by remember { mutableStateOf(readCrash()) }
+                    val text = crash
+                    if (text != null) {
+                        CrashScreen(text) {
+                            File(filesDir, PerfApp.CRASH_FILE).delete()
+                            crash = null
+                        }
+                    } else {
+                        AppRoot(vm)
+                    }
                 }
             }
         }
     }
+
+    private fun readCrash(): String? =
+        runCatching { File(filesDir, PerfApp.CRASH_FILE).takeIf { it.exists() }?.readText() }.getOrNull()
 
     override fun onResume() {
         super.onResume()
@@ -131,5 +148,14 @@ fun AppRoot(vm: AppViewModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+fun CrashScreen(trace: String, onContinue: () -> Unit) {
+    Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
+        Text("حدث خطأ في المرة السابقة. صوّر هذه الشاشة وأرسلها للمطوّر:")
+        Text(trace)
+        Button(onClick = onContinue) { Text("متابعة") }
     }
 }
