@@ -1,37 +1,39 @@
 package com.example.perfcontrol.ui
 
+import android.graphics.Color as AColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -40,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -53,7 +56,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            val mode by vm.themeMode.collectAsState()
+            val dark = when (mode) {
+                1 -> false
+                2 -> true
+                else -> isSystemInDarkTheme()
+            }
+            SystemBars(dark)
+            PerfTheme(dark) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     var crash by remember { mutableStateOf(readCrash()) }
                     val text = crash
@@ -80,18 +90,30 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { Main, Setup, Settings }
+@Composable
+private fun SystemBars(dark: Boolean) {
+    val activity = LocalContext.current as ComponentActivity
+    SideEffect {
+        val style = if (dark) {
+            SystemBarStyle.dark(AColor.TRANSPARENT)
+        } else {
+            SystemBarStyle.light(AColor.TRANSPARENT, AColor.TRANSPARENT)
+        }
+        activity.enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+    }
+}
+
+private enum class Screen { Main, Setup }
 private data class TabItem(val title: String, val icon: ImageVector)
 
 private val tabs = listOf(
-    TabItem("الأداء", Icons.Default.Home),
-    TabItem("العمليات", Icons.Default.Info),
-    TabItem("التنظيف", Icons.Default.Delete),
-    TabItem("الإقلاع", Icons.Default.PlayArrow),
+    TabItem("الرئيسية", Icons.Default.Home),
+    TabItem("التحسين", Icons.Default.Build),
+    TabItem("التطبيقات", Icons.Default.Menu),
     TabItem("الصحة", Icons.Default.Favorite),
+    TabItem("الإعدادات", Icons.Default.Settings),
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(vm: AppViewModel) {
     var tab by remember { mutableIntStateOf(0) }
@@ -109,16 +131,6 @@ fun AppRoot(vm: AppViewModel) {
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("متحكم الأداء") },
-                actions = {
-                    IconButton(onClick = { screen = Screen.Settings }) {
-                        Icon(Icons.Default.Settings, contentDescription = "الإعدادات")
-                    }
-                },
-            )
-        },
         bottomBar = {
             if (screen == Screen.Main) {
                 NavigationBar {
@@ -139,15 +151,14 @@ fun AppRoot(vm: AppViewModel) {
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             when (screen) {
                 Screen.Setup -> SetupScreen(state, vm) { screen = Screen.Main }
-                Screen.Settings -> SettingsScreen(vm) { screen = Screen.Main }
                 Screen.Main -> {
-                    if (state != ShizukuState.Ready) ShizukuBanner(state) { screen = Screen.Setup }
+                    if (state != ShizukuState.Ready && tab != 4) ShizukuBanner(state) { screen = Screen.Setup }
                     when (tab) {
-                        0 -> PerformanceTab(vm)
-                        1 -> ProcessesTab(vm)
-                        2 -> CleanupTab(vm)
-                        3 -> StartupTab(vm)
-                        else -> HealthTab(vm)
+                        0 -> HomeTab(vm)
+                        1 -> TuneTab(vm)
+                        2 -> AppsTab(vm)
+                        3 -> HealthTab(vm)
+                        else -> SettingsTab(vm) { screen = Screen.Setup }
                     }
                 }
             }
@@ -157,9 +168,11 @@ fun AppRoot(vm: AppViewModel) {
 
 @Composable
 fun CrashScreen(trace: String, onContinue: () -> Unit) {
-    Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("حدث خطأ في المرة السابقة. صوّر هذه الشاشة وأرسلها للمطوّر:")
-        Text(trace)
-        Button(onClick = onContinue) { Text("متابعة") }
+    Surface(Modifier.fillMaxSize()) {
+        Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
+            Text("حدث خطأ في المرة السابقة. صوّر هذه الشاشة وأرسلها للمطوّر:")
+            Text(trace)
+            Button(onClick = onContinue) { Text("متابعة") }
+        }
     }
 }

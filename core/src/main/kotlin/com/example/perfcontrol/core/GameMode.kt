@@ -1,43 +1,88 @@
 package com.example.perfcontrol.core
 
-private data class GameSetting(val ns: String, val key: String, val value: String)
+data class SettingChange(val ns: String, val key: String, val value: String)
+
+private val SAFE_VALUE = Regex("^[0-9.\\-]+$")
+
+/** يطبّق إعدادات النظام ويحفظ قيمها الأصلية ليتمكن من إعادتها. */
+class SettingsApplier(
+    private val runner: CommandRunner,
+    private val store: StateStore,
+    private val prefix: String,
+) {
+    private fun keyOf(s: SettingChange) = "$prefix:${s.ns}.${s.key}"
+    private val activeKey get() = "$prefix:active"
+
+    suspend fun read(ns: String, key: String): String? =
+        (runner.run("settings get $ns $key") as? CommandResult.Success)?.output?.trim()
+
+    fun isActive(): Boolean = store.original(activeKey) != null
+
+    fun markActive(on: Boolean) {
+        if (on) store.saveOriginal(activeKey, "1") else store.clear(activeKey)
+    }
+
+    suspend fun apply(list: List<SettingChange>): Int {
+        var applied = 0
+        for (s in list) {
+            val before = read(s.ns, s.key) ?: continue
+            if (store.original(keyOf(s)) == null) store.saveOriginal(keyOf(s), before)
+            val put = runner.run("settings put ${s.ns} ${s.key} ${s.value}")
+            if (put is CommandResult.Success && read(s.ns, s.key) == s.value) applied++
+        }
+        return applied
+    }
+
+    suspend fun restore(list: List<SettingChange>): Int {
+        var restored = 0
+        for (s in list) {
+            val orig = store.original(keyOf(s)) ?: continue
+            val r = if (orig.isBlank() || orig == "null" || !SAFE_VALUE.matches(orig)) {
+                runner.run("settings delete ${s.ns} ${s.key}")
+            } else {
+                runner.run("settings put ${s.ns} ${s.key} $orig")
+            }
+            if (r is CommandResult.Success) {
+                store.clear(keyOf(s))
+                restored++
+            }
+        }
+        return restored
+    }
+}
 
 private val GAME_SETTINGS = listOf(
-    GameSetting("global", "window_animation_scale", "0.5"),
-    GameSetting("global", "transition_animation_scale", "0.5"),
-    GameSetting("global", "animator_duration_scale", "0.5"),
-    GameSetting("system", "min_refresh_rate", "120"),
-    GameSetting("system", "peak_refresh_rate", "120"),
+    SettingChange("global", "window_animation_scale", "0.5"),
+    SettingChange("global", "transition_animation_scale", "0.5"),
+    SettingChange("global", "animator_duration_scale", "0.5"),
+    SettingChange("system", "min_refresh_rate", "120"),
+    SettingChange("system", "peak_refresh_rate", "120"),
+)
+
+private val POWERSAVE_SETTINGS = listOf(
+    SettingChange("global", "low_power", "1"),
+    SettingChange("system", "min_refresh_rate", "60"),
+    SettingChange("system", "peak_refresh_rate", "60"),
 )
 
 const val GAME_ACTIVE_KEY = "game:active"
-
-private val SAFE_VALUE = Regex("^[0-9.\\-]+$")
+const val POWERSAVE_ACTIVE_KEY = "psave:active"
 
 data class GameModeResult(val ok: Boolean, val message: String, val freedKb: Long = 0)
 
 class GameMode(
-    private val runner: CommandRunner,
+    runner: CommandRunner,
     private val booster: Booster,
-    private val store: StateStore,
+    store: StateStore,
 ) {
-    fun isEnabled(): Boolean = store.original(GAME_ACTIVE_KEY) != null
+    private val applier = SettingsApplier(runner, store, "game")
 
-    private fun keyOf(s: GameSetting) = "game:${s.ns}.${s.key}"
-
-    private suspend fun read(s: GameSetting): String? =
-        (runner.run("settings get ${s.ns} ${s.key}") as? CommandResult.Success)?.output?.trim()
+    fun isEnabled(): Boolean = applier.isActive()
 
     suspend fun enable(candidates: List<String>): GameModeResult {
-        var applied = 0
-        for (s in GAME_SETTINGS) {
-            val before = read(s) ?: continue
-            if (store.original(keyOf(s)) == null) store.saveOriginal(keyOf(s), before)
-            val put = runner.run("settings put ${s.ns} ${s.key} ${s.value}")
-            if (put is CommandResult.Success && read(s) == s.value) applied++
-        }
+        val applied = applier.apply(GAME_SETTINGS)
         val report = booster.boost(candidates)
-        store.saveOriginal(GAME_ACTIVE_KEY, "1")
+        applier.markActive(true)
         val stopped = report.batch.succeeded.size
         val ok = applied > 0 || stopped > 0
         val msg = buildString {
@@ -50,21 +95,29 @@ class GameMode(
     }
 
     suspend fun disable(): GameModeResult {
-        var restored = 0
-        for (s in GAME_SETTINGS) {
-            val orig = store.original(keyOf(s)) ?: continue
-            val r = if (orig.isBlank() || orig == "null" || !SAFE_VALUE.matches(orig)) {
-                runner.run("settings delete ${s.ns} ${s.key}")
-            } else {
-                runner.run("settings put ${s.ns} ${s.key} $orig")
-            }
-            if (r is CommandResult.Success) {
-                store.clear(keyOf(s))
-                restored++
-            }
-        }
-        store.clear(GAME_ACTIVE_KEY)
+        val restored = applier.restore(GAME_SETTINGS)
+        applier.markActive(false)
         return GameModeResult(true, "تم إيقاف وضع الألعاب وإعادة $restored إعداد")
+    }
+}
+
+class PowerSaveMode(runner: CommandRunner, store: StateStore) {
+    private val applier = SettingsApplier(runner, store, "psave")
+
+    fun isEnabled(): Boolean = applier.isActive()
+
+    suspend fun enable(): GameModeResult {
+        val applied = applier.apply(POWERSAVE_SETTINGS)
+        applier.markActive(true)
+        val msg = "وضع توفير الطاقة يعمل: طُبّق $applied من ${POWERSAVE_SETTINGS.size} إعداد" +
+            (if (applied == 0) ". لم يقبل النظام تغيير الإعدادات" else "")
+        return GameModeResult(applied > 0, msg)
+    }
+
+    suspend fun disable(): GameModeResult {
+        val restored = applier.restore(POWERSAVE_SETTINGS)
+        applier.markActive(false)
+        return GameModeResult(true, "تم إيقاف وضع توفير الطاقة وإعادة $restored إعداد")
     }
 }
 

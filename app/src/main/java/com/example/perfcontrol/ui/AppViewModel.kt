@@ -8,6 +8,10 @@ import com.example.perfcontrol.alerts.AlertPrefs
 import com.example.perfcontrol.alerts.AlertScheduler
 import com.example.perfcontrol.android.AppEntry
 import com.example.perfcontrol.android.HealthInputReader
+import com.example.perfcontrol.android.UiPrefs
+import com.example.perfcontrol.core.POWERSAVE_ACTIVE_KEY
+import com.example.perfcontrol.core.PowerSaveMode
+import com.example.perfcontrol.core.SystemTuner
 import com.example.perfcontrol.core.AppOptimizer
 import com.example.perfcontrol.core.GAME_ACTIVE_KEY
 import com.example.perfcontrol.core.GameMode
@@ -102,6 +106,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun refreshSample() {
         sample.value = monitor.sample()
         stats.value = withContext(Dispatchers.IO) { statsReader.read() }
+        heavy.value = if (shizukuState.value == ShizukuState.Ready) {
+            HeavyApps.select(sample.value?.processes.orEmpty(), protection())
+        } else {
+            emptyList()
+        }
     }
 
     fun boostPlan(): List<String> =
@@ -205,6 +214,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val p = protection()
         val booster = Booster(runner, ProcessManager(runner, p), cleaner, p)
         val g = GameMode(runner, booster, store)
+        if (!g.isEnabled()) disablePowerSaveIfActive()
         val r = if (g.isEnabled()) {
             g.disable()
         } else {
@@ -226,12 +236,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val input = withContext(Dispatchers.IO) { healthReader.read() }
         health.value = HealthRater.rate(input)
         uptimeHours.value = input.uptimeHours
-        if (shizukuState.value == ShizukuState.Ready) {
-            refreshSample()
-            heavy.value = HeavyApps.select(sample.value?.processes.orEmpty(), protection())
-        } else {
-            heavy.value = emptyList()
-        }
     }
 
     fun stopHeavy(pkgs: List<String>) = launchBusy {
@@ -248,5 +252,100 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun testAlert() {
         AlertNotifier(getApplication()).notify(999, "هذا تنبيه تجريبي: التنبيهات تعمل بنجاح")
+    }
+
+    // ---- خيارات التحسين والمظهر ----
+    private val tuner = SystemTuner(runner)
+    private val uiPrefs = UiPrefs(app)
+
+    val themeMode = MutableStateFlow(uiPrefs.themeMode)
+    val animChoice = MutableStateFlow<Int?>(null)
+    val refreshChoice = MutableStateFlow<Int?>(null)
+    val batterySaver = MutableStateFlow(false)
+    val powerSaveEnabled = MutableStateFlow(store.original(POWERSAVE_ACTIVE_KEY) != null)
+
+    fun setTheme(mode: Int) {
+        uiPrefs.themeMode = mode
+        themeMode.value = mode
+    }
+
+    private suspend fun disablePowerSaveIfActive() {
+        val ps = PowerSaveMode(runner, store)
+        if (ps.isEnabled()) {
+            ps.disable()
+            powerSaveEnabled.value = false
+        }
+    }
+
+    fun togglePowerSave() = launchBusy {
+        val ps = PowerSaveMode(runner, store)
+        val r = if (ps.isEnabled()) {
+            ps.disable()
+        } else {
+            val p = protection()
+            val g = GameMode(runner, Booster(runner, ProcessManager(runner, p), cleaner, p), store)
+            if (g.isEnabled()) {
+                g.disable()
+                gameEnabled.value = false
+            }
+            ps.enable()
+        }
+        powerSaveEnabled.value = ps.isEnabled()
+        message.value = r.message
+    }
+
+    fun loadTune() {
+        loadCleanup()
+        if (shizukuState.value != ShizukuState.Ready) return
+        viewModelScope.launch {
+            animChoice.value = when (tuner.animationScale()?.toFloatOrNull()) {
+                0f -> 0
+                0.5f -> 1
+                1f -> 2
+                else -> if (tuner.animationScale() == "null") 2 else null
+            }
+            refreshChoice.value = when (val v = tuner.peakRefreshRate()) {
+                "null" -> 0
+                else -> when (v?.toFloatOrNull()?.toInt()) {
+                    60 -> 1
+                    90 -> 2
+                    120 -> 3
+                    else -> null
+                }
+            }
+            batterySaver.value = tuner.isBatterySaver()
+        }
+    }
+
+    fun setAnim(choice: Int) = launchBusy {
+        val value = listOf("0", "0.5", "1")[choice]
+        val r = tuner.setAnimationScale(value)
+        if (r is CommandResult.Success) animChoice.value = choice
+        message.value = if (r is CommandResult.Success) "تم ضبط سرعة الرسوم" else "تعذر الضبط: ${(r as CommandResult.Failure).reason}"
+    }
+
+    fun setRefresh(choice: Int) = launchBusy {
+        val hz = listOf<Int?>(null, 60, 90, 120)[choice]
+        val r = tuner.setRefreshRate(hz)
+        if (r is CommandResult.Success) refreshChoice.value = choice
+        message.value = if (r is CommandResult.Success) "تم ضبط معدل التحديث" else "تعذر الضبط: ${(r as CommandResult.Failure).reason}"
+    }
+
+    fun setBatterySaver(on: Boolean) = launchBusy {
+        val r = tuner.setBatterySaver(on)
+        if (r is CommandResult.Success) batterySaver.value = on
+        message.value = if (r is CommandResult.Success) {
+            if (on) "تم تشغيل توفير الطاقة" else "تم إيقاف توفير الطاقة"
+        } else {
+            "تعذر الضبط: ${(r as CommandResult.Failure).reason}"
+        }
+    }
+
+    fun maintainStorage() = launchBusy {
+        message.value = "بدأت صيانة التخزين..."
+        message.value = when (val r = tuner.storageMaintenance()) {
+            is CommandResult.Success -> "اكتملت صيانة التخزين"
+            is CommandResult.Failure -> "تعذرت الصيانة: ${r.reason}"
+        }
     }
 }
