@@ -33,7 +33,7 @@ import kotlinx.coroutines.delay
 private fun mb(kb: Long) = "%.0f MB".format(kb / 1024.0)
 
 @Composable
-private fun InfoCard(title: String, body: String) {
+internal fun InfoCard(title: String, body: String) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -42,14 +42,17 @@ private fun InfoCard(title: String, body: String) {
     }
 }
 
-private val listPadding = PaddingValues(16.dp)
-private val listSpacing = Arrangement.spacedBy(12.dp)
+internal val listPadding = PaddingValues(16.dp)
+internal val listSpacing = Arrangement.spacedBy(12.dp)
 
 @Composable
 fun PerformanceTab(vm: AppViewModel) {
     val sample by vm.sample.collectAsState()
     val stats by vm.stats.collectAsState()
     var showBoost by remember { mutableStateOf(false) }
+    var showOptimize by remember { mutableStateOf(false) }
+    val state by vm.shizukuState.collectAsState()
+    val gameOn by vm.gameEnabled.collectAsState()
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -61,6 +64,31 @@ fun PerformanceTab(vm: AppViewModel) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = listPadding, verticalArrangement = listSpacing) {
         item {
             Button(onClick = { showBoost = true }, modifier = Modifier.fillMaxWidth()) { Text("رفع الأداء") }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("وضع الألعاب", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "يوقف التطبيقات الثقيلة، ويسرّع الرسوم المتحركة، ويثبّت معدل التحديث على 120 هرتز. " +
+                            "اضغط مرة أخرى لإعادة الإعدادات كما كانت.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Button(
+                        onClick = { vm.toggleGame() },
+                        enabled = state == ShizukuState.Ready,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (gameOn) "إيقاف وضع الألعاب" else "تشغيل وضع الألعاب") }
+                    if (state != ShizukuState.Ready) Text("يحتاج Shizuku جاهزاً.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        item {
+            OutlinedButton(
+                onClick = { showOptimize = true },
+                enabled = state == ShizukuState.Ready,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("تحسين التطبيقات (تستغرق دقائق)") }
         }
         item {
             val cpu = sample?.cpuPercent?.let { "%.0f%%".format(it) } ?: "غير متاح (يحتاج Shizuku)"
@@ -112,6 +140,16 @@ fun PerformanceTab(vm: AppViewModel) {
                 TextButton(enabled = plan.isNotEmpty(), onClick = { showBoost = false; vm.boost(plan) }) { Text("تأكيد") }
             },
             dismissButton = { TextButton(onClick = { showBoost = false }) { Text("إلغاء") } },
+        )
+    }
+
+    if (showOptimize) {
+        AlertDialog(
+            onDismissRequest = { showOptimize = false },
+            title = { Text("تحسين التطبيقات") },
+            text = { Text("سيعيد النظام تحسين تشغيل كل التطبيقات لتفتح أسرع. قد يستغرق عدة دقائق وقد يسخن الجهاز قليلاً. أبقِ التطبيق مفتوحاً حتى ينتهي.") },
+            confirmButton = { TextButton(onClick = { showOptimize = false; vm.optimizeApps() }) { Text("ابدأ") } },
+            dismissButton = { TextButton(onClick = { showOptimize = false }) { Text("إلغاء") } },
         )
     }
 }

@@ -15,6 +15,7 @@ import android.provider.Settings
 import android.provider.Telephony
 import android.telecom.TelecomManager
 import android.content.ComponentName
+import com.example.perfcontrol.core.HealthInput
 import java.io.File
 
 data class AppEntry(val pkg: String, val label: String)
@@ -131,5 +132,31 @@ class StatsReader(private val ctx: Context) {
     private companion object {
         const val GB = 1024.0 * 1024 * 1024
         const val MB = 1024L * 1024
+    }
+}
+
+class HealthInputReader(private val ctx: Context) {
+    fun read(): HealthInput {
+        val bat = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val temp = (bat?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
+        val health = bat?.getIntExtra(BatteryManager.EXTRA_HEALTH, BatteryManager.BATTERY_HEALTH_UNKNOWN)
+            ?: BatteryManager.BATTERY_HEALTH_UNKNOWN
+        val good = health == BatteryManager.BATTERY_HEALTH_GOOD || health == BatteryManager.BATTERY_HEALTH_UNKNOWN
+
+        val stat = StatFs(Environment.getDataDirectory().path)
+        val total = stat.totalBytes.coerceAtLeast(1L)
+        val storageFree = (stat.availableBytes * 100 / total).toInt()
+
+        val mi = ActivityManager.MemoryInfo()
+        (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(mi)
+        val ramFree = (mi.availMem * 100 / mi.totalMem.coerceAtLeast(1L)).toInt()
+
+        return HealthInput(
+            uptimeHours = SystemClock.elapsedRealtime() / 3_600_000L,
+            ramAvailPercent = ramFree,
+            storageFreePercent = storageFree,
+            tempC = temp,
+            batteryHealthGood = good,
+        )
     }
 }

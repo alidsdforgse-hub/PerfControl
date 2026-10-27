@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
@@ -86,7 +87,8 @@ private val tabs = listOf(
     TabItem("الأداء", Icons.Default.Home),
     TabItem("العمليات", Icons.Default.Info),
     TabItem("التنظيف", Icons.Default.Delete),
-    TabItem("بدء التشغيل", Icons.Default.PlayArrow),
+    TabItem("الإقلاع", Icons.Default.PlayArrow),
+    TabItem("الصحة", Icons.Default.Favorite),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -144,7 +146,8 @@ fun AppRoot(vm: AppViewModel) {
                         0 -> PerformanceTab(vm)
                         1 -> ProcessesTab(vm)
                         2 -> CleanupTab(vm)
-                        else -> StartupTab(vm)
+                        3 -> StartupTab(vm)
+                        else -> HealthTab(vm)
                     }
                 }
             }

@@ -23,7 +23,14 @@ jobs:
           gradle-version: 8.9
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: |
+          set +e
+          gradle assembleDebug --stacktrace > build.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            grep -E "^e: |error:|What went wrong|Execution failed|Could not" -A2 build.log | head -40 | while IFS= read -r l; do echo "::error::${l}"; done
+          fi
+          exit $code
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

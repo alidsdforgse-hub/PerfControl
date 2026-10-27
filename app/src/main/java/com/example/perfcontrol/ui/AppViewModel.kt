@@ -3,7 +3,18 @@ package com.example.perfcontrol.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.perfcontrol.alerts.AlertNotifier
+import com.example.perfcontrol.alerts.AlertPrefs
+import com.example.perfcontrol.alerts.AlertScheduler
 import com.example.perfcontrol.android.AppEntry
+import com.example.perfcontrol.android.HealthInputReader
+import com.example.perfcontrol.core.AppOptimizer
+import com.example.perfcontrol.core.GAME_ACTIVE_KEY
+import com.example.perfcontrol.core.GameMode
+import com.example.perfcontrol.core.HealthRater
+import com.example.perfcontrol.core.HealthReport
+import com.example.perfcontrol.core.HeavyApp
+import com.example.perfcontrol.core.HeavyApps
 import com.example.perfcontrol.android.DeviceInfo
 import com.example.perfcontrol.android.OfficialApis
 import com.example.perfcontrol.android.OwnCache
@@ -174,5 +185,68 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (on) s += pkg else s -= pkg
         store.setExclusions(s)
         exclusions.value = s
+    }
+
+    // ---- ميزات جديدة ----
+    private val longRunner = ShizukuCommandRunner({ shizuku.currentService() }, 30 * 60 * 1000L)
+    private val healthReader = HealthInputReader(app)
+    private val alertPrefs = AlertPrefs(app)
+
+    val gameEnabled = MutableStateFlow(store.original(GAME_ACTIVE_KEY) != null)
+    val health = MutableStateFlow<HealthReport?>(null)
+    val heavy = MutableStateFlow<List<HeavyApp>>(emptyList())
+    val uptimeHours = MutableStateFlow(0L)
+    val alertsEnabled = MutableStateFlow(alertPrefs.enabled)
+
+    fun notifyUser(text: String) { message.value = text }
+    fun selfPackage(): String = getApplication<Application>().packageName
+
+    fun toggleGame() = launchBusy {
+        val p = protection()
+        val booster = Booster(runner, ProcessManager(runner, p), cleaner, p)
+        val g = GameMode(runner, booster, store)
+        val r = if (g.isEnabled()) {
+            g.disable()
+        } else {
+            g.enable(sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName } ?: emptyList())
+        }
+        gameEnabled.value = g.isEnabled()
+        message.value = r.message
+    }
+
+    fun optimizeApps() = launchBusy {
+        message.value = "بدأ تحسين التطبيقات، وقد يستغرق عدة دقائق. أبقِ التطبيق مفتوحاً."
+        message.value = when (val r = AppOptimizer(longRunner).optimizeAll()) {
+            is CommandResult.Success -> "اكتمل تحسين التطبيقات"
+            is CommandResult.Failure -> "تعذر التحسين: ${r.reason}"
+        }
+    }
+
+    suspend fun refreshHealth() {
+        val input = withContext(Dispatchers.IO) { healthReader.read() }
+        health.value = HealthRater.rate(input)
+        uptimeHours.value = input.uptimeHours
+        if (shizukuState.value == ShizukuState.Ready) {
+            refreshSample()
+            heavy.value = HeavyApps.select(sample.value?.processes.orEmpty(), protection())
+        } else {
+            heavy.value = emptyList()
+        }
+    }
+
+    fun stopHeavy(pkgs: List<String>) = launchBusy {
+        val r = ProcessManager(runner, protection()).forceStop(pkgs)
+        message.value = "تم إيقاف ${r.succeeded.size} تطبيق" +
+            (if (r.failed.isNotEmpty()) "، وفشل ${r.failed.size}" else "")
+    }
+
+    fun setAlerts(on: Boolean) {
+        alertPrefs.enabled = on
+        alertsEnabled.value = on
+        if (on) AlertScheduler.enable(getApplication()) else AlertScheduler.disable(getApplication())
+    }
+
+    fun testAlert() {
+        AlertNotifier(getApplication()).notify(999, "هذا تنبيه تجريبي: التنبيهات تعمل بنجاح")
     }
 }
