@@ -32,6 +32,7 @@ fun HomeTab(vm: AppViewModel) {
     val report by vm.health.collectAsState()
     val gameOn by vm.gameEnabled.collectAsState()
     val saveOn by vm.powerSaveEnabled.collectAsState()
+    val hist by vm.history.collectAsState()
     var showBoost by remember { mutableStateOf(false) }
     val ready = state == ShizukuState.Ready
 
@@ -111,6 +112,7 @@ fun HomeTab(vm: AppViewModel) {
                 MiniToggle("توفير الطاقة", saveOn, ready, Modifier.weight(1f)) { vm.togglePowerSave() }
             }
         }
+        item { LiveCharts(hist) }
         val top = sample?.processes?.sortedByDescending { it.cpuPercent }?.take(3).orEmpty()
         if (top.isNotEmpty()) {
             item { SectionTitle("الأكثر استهلاكاً الآن") }

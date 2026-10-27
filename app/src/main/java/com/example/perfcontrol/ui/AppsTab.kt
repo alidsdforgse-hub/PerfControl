@@ -8,7 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.example.perfcontrol.core.ShizukuState
 import kotlinx.coroutines.delay
 
@@ -29,15 +30,17 @@ import kotlinx.coroutines.delay
 fun AppsTab(vm: AppViewModel) {
     var sub by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = sub) {
-            listOf("العمليات", "الثقيلة", "الإقلاع").forEachIndexed { i, t ->
+        ScrollableTabRow(selectedTabIndex = sub, edgePadding = 0.dp) {
+            listOf("العمليات", "الثقيلة", "الإقلاع", "التجميد", "الإشعارات").forEachIndexed { i, t ->
                 Tab(selected = sub == i, onClick = { sub = i }, text = { Text(t) })
             }
         }
         when (sub) {
             0 -> ProcessesTab(vm)
             1 -> HeavyTab(vm)
-            else -> StartupTab(vm)
+            2 -> StartupTab(vm)
+            3 -> FreezeTab(vm)
+            else -> ProtectTab(vm)
         }
     }
 }
@@ -92,5 +95,86 @@ fun HeavyTab(vm: AppViewModel) {
             },
             dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("إلغاء") } },
         )
+    }
+}
+
+@Composable
+fun FreezeTab(vm: AppViewModel) {
+    val state by vm.shizukuState.collectAsState()
+    val apps by vm.allUserApps.collectAsState()
+    val frozen by vm.frozen.collectAsState()
+    var pending by remember { mutableStateOf<String?>(null) }
+    val ready = state == ShizukuState.Ready
+
+    LaunchedEffect(state) { vm.loadFreeze() }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = listPadding, verticalArrangement = listSpacing) {
+        item {
+            SoftCard {
+                Text("تجميد التطبيقات", fontWeight = FontWeight.SemiBold)
+                Caption("التطبيق المجمّد يُعطَّل بالكامل: لا يعمل ولا يظهر في الشاشة الرئيسية ولا يستهلك شيئاً. يمكنك إعادته بزر واحد.")
+                if (!ready) Caption("يحتاج Shizuku جاهزاً.")
+            }
+        }
+        if (frozen.isNotEmpty()) {
+            item { SectionTitle("المجمّدة الآن (${frozen.size})") }
+            items(frozen.toList(), key = { "f_" + it }) { pkg ->
+                val label = remember(pkg) { vm.device.label(pkg) }
+                SoftCard {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(label, fontWeight = FontWeight.SemiBold)
+                            Caption(pkg)
+                        }
+                        TextButton(enabled = ready, onClick = { vm.setFrozen(pkg, false) }) { Text("إعادة") }
+                    }
+                }
+            }
+        }
+        item { SectionTitle("تطبيقاتك") }
+        items(apps.filter { it.pkg !in frozen }, key = { "a_" + it.pkg }) { app ->
+            SoftCard {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(app.label, fontWeight = FontWeight.SemiBold)
+                        Caption(app.pkg)
+                    }
+                    TextButton(enabled = ready, onClick = { pending = app.pkg }) { Text("تجميد") }
+                }
+            }
+        }
+    }
+
+    pending?.let { pkg ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text("تجميد ${vm.device.label(pkg)}؟") },
+            text = { Text("سيتوقف التطبيق ويختفي حتى تعيده من هذه الشاشة. لا يُنصح بتجميد تطبيق تنتظر إشعاراته.") },
+            confirmButton = { TextButton(onClick = { pending = null; vm.setFrozen(pkg, true) }) { Text("تجميد") } },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text("إلغاء") } },
+        )
+    }
+}
+
+@Composable
+fun ProtectTab(vm: AppViewModel) {
+    val state by vm.shizukuState.collectAsState()
+    val apps by vm.allUserApps.collectAsState()
+    val prot by vm.notifProtected.collectAsState()
+    val ready = state == ShizukuState.Ready
+
+    LaunchedEffect(state) { vm.loadProtect() }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = listPadding, verticalArrangement = listSpacing) {
+        item {
+            SoftCard {
+                Text("حماية الإشعارات", fontWeight = FontWeight.SemiBold)
+                Caption("اختر التطبيقات المهمة (مثل واتساب). لن يوقفها رفع الأداء، ولن يقتلها توفير الطاقة العميق، فتصلك إشعاراتها دائماً.")
+                if (!ready) Caption("يحتاج Shizuku جاهزاً.")
+            }
+        }
+        items(apps, key = { it.pkg }) { app ->
+            ToggleCard(app.label, app.pkg, app.pkg in prot, ready) { vm.setNotifProtected(app.pkg, it) }
+        }
     }
 }

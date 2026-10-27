@@ -39,6 +39,14 @@ import com.example.perfcontrol.core.ShizukuState
 import com.example.perfcontrol.core.StartupManager
 import com.example.perfcontrol.shizuku.ShizukuCommandRunner
 import com.example.perfcontrol.shizuku.ShizukuManager
+import com.example.perfcontrol.android.AutoPrefs
+import com.example.perfcontrol.background.AutoScheduler
+import com.example.perfcontrol.background.Shortcuts
+import com.example.perfcontrol.core.BenchRow
+import com.example.perfcontrol.core.BenchmarkRunner
+import com.example.perfcontrol.core.FreezeManager
+import com.example.perfcontrol.core.NotificationProtector
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,7 +54,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
-    private val shizuku = ShizukuManager(app)
+    private val shizuku = (app as com.example.perfcontrol.PerfApp).shizuku
     val shizukuState: StateFlow<ShizukuState> = shizuku.state
 
     private val runner = ShizukuCommandRunner({ shizuku.currentService() })
@@ -106,6 +114,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun refreshSample() {
         sample.value = monitor.sample()
         stats.value = withContext(Dispatchers.IO) { statsReader.read() }
+        stats.value?.let { st ->
+            val ram = 100f - (st.ramAvailMb * 100f / st.ramTotalMb.coerceAtLeast(1L))
+            val point = ChartPoint((sample.value?.cpuPercent ?: 0.0).toFloat(), ram, st.tempC)
+            history.value = (history.value + point).takeLast(120)
+        }
         heavy.value = if (shizukuState.value == ShizukuState.Ready) {
             HeavyApps.select(sample.value?.processes.orEmpty(), protection())
         } else {
@@ -221,6 +234,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             g.enable(sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName } ?: emptyList())
         }
         gameEnabled.value = g.isEnabled()
+        if (g.isEnabled()) {
+            AutoScheduler.startGameTimer(getApplication(), autoPrefs.gameMinutes)
+        } else {
+            AutoScheduler.cancelGameTimer(getApplication())
+        }
         message.value = r.message
     }
 
@@ -346,6 +364,91 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         message.value = when (val r = tuner.storageMaintenance()) {
             is CommandResult.Success -> "اكتملت صيانة التخزين"
             is CommandResult.Failure -> "تعذرت الصيانة: ${r.reason}"
+        }
+    }
+
+    // ---- ميزات الإصدار 1.3 ----
+    data class ChartPoint(val cpu: Float, val ramPct: Float, val tempC: Float)
+
+    private val autoPrefs = AutoPrefs(app)
+    val history = MutableStateFlow<List<ChartPoint>>(emptyList())
+    val gameMinutes = MutableStateFlow(autoPrefs.gameMinutes)
+    val cleanHours = MutableStateFlow(autoPrefs.cleanHours)
+    val shortcutsOn = MutableStateFlow(autoPrefs.shortcuts)
+    val frozen = MutableStateFlow<Set<String>>(emptySet())
+    val notifProtected = MutableStateFlow<Set<String>>(emptySet())
+    val benchRows = MutableStateFlow<List<BenchRow>?>(null)
+    val benchStage = MutableStateFlow<String?>(null)
+
+    fun setGameMinutes(m: Int) {
+        autoPrefs.gameMinutes = m
+        gameMinutes.value = m
+        if (gameEnabled.value) {
+            if (m > 0) AutoScheduler.startGameTimer(getApplication(), m) else AutoScheduler.cancelGameTimer(getApplication())
+        }
+    }
+
+    fun setCleanHours(h: Int) {
+        autoPrefs.cleanHours = h
+        cleanHours.value = h
+        AutoScheduler.setAutoClean(getApplication(), h)
+        message.value = if (h > 0) "سيُنظَّف الكاش تلقائياً كل $h ساعة" else "تم إيقاف التنظيف التلقائي"
+    }
+
+    fun setShortcuts(on: Boolean) {
+        autoPrefs.shortcuts = on
+        shortcutsOn.value = on
+        if (on) Shortcuts.show(getApplication()) else Shortcuts.hide(getApplication())
+    }
+
+    fun loadFreeze() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { allUserApps.value = device.userApps() }
+            frozen.value = FreezeManager(runner, protection()).frozen() ?: emptySet()
+        }
+    }
+
+    fun setFrozen(pkg: String, on: Boolean) = launchBusy {
+        val m = FreezeManager(runner, protection())
+        val r = if (on) m.freeze(pkg) else m.unfreeze(pkg)
+        message.value = r.message
+        frozen.value = m.frozen() ?: frozen.value
+    }
+
+    fun loadProtect() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { allUserApps.value = device.userApps() }
+            notifProtected.value = NotificationProtector(runner).protectedApps() ?: emptySet()
+        }
+    }
+
+    fun setNotifProtected(pkg: String, on: Boolean) = launchBusy {
+        val p = NotificationProtector(runner)
+        val r = if (on) p.protect(pkg) else p.unprotect(pkg)
+        message.value = r.message
+        if (r.ok) toggleExclusion(pkg, on)
+        notifProtected.value = p.protectedApps() ?: notifProtected.value
+    }
+
+    fun runBenchmark(pkg: String?) = launchBusy {
+        benchRows.value = null
+        val self = selfPackage() + "/com.example.perfcontrol.ui.MainActivity"
+        val bench = BenchmarkRunner(runner, self)
+        try {
+            benchStage.value = "قياس الحالة قبل التحسين..."
+            val before = bench.snapshot(pkg)
+            benchStage.value = "جارٍ التحسين..."
+            val b = booster()
+            b.boost(b.plan(sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName } ?: emptyList()))
+            delay(2500)
+            benchStage.value = "قياس الحالة بعد التحسين..."
+            val after = bench.snapshot(pkg)
+            val rows = bench.compare(before, after)
+            benchRows.value = rows
+            if (rows.isEmpty()) message.value = "تعذر القياس. تحتاج Shizuku جاهزاً."
+        } finally {
+            bench.returnToSelf()
+            benchStage.value = null
         }
     }
 }

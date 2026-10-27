@@ -1,9 +1,12 @@
 package com.example.perfcontrol
 
 import android.app.Application
+import com.example.perfcontrol.shizuku.ShizukuManager
 import java.io.File
 
 class PerfApp : Application() {
+    val shizuku: ShizukuManager by lazy { ShizukuManager(this) }
+
     override fun onCreate() {
         super.onCreate()
         val previous = Thread.getDefaultUncaughtExceptionHandler()
