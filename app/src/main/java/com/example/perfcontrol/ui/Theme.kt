@@ -5,7 +5,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
@@ -67,11 +83,56 @@ private val AppShapes = Shapes(
     large = RoundedCornerShape(28.dp),
 )
 
-@Composable
-fun PerfTheme(dark: Boolean, content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (dark) DarkColors else LightColors,
-        shapes = AppShapes,
-        content = content,
+val LocalGlass = compositionLocalOf { false }
+
+private fun glassScheme(base: androidx.compose.material3.ColorScheme, dark: Boolean): androidx.compose.material3.ColorScheme {
+    val fill = if (dark) Color.White.copy(alpha = 0.09f) else Color.White.copy(alpha = 0.58f)
+    val fillLow = if (dark) Color.White.copy(alpha = 0.06f) else Color.White.copy(alpha = 0.45f)
+    return base.copy(
+        surfaceContainerLowest = fillLow,
+        surfaceContainerLow = fillLow,
+        surfaceContainer = fill,
+        surfaceContainerHighest = fill,
     )
+}
+
+@Composable
+fun PerfTheme(dark: Boolean, glass: Boolean = false, content: @Composable () -> Unit) {
+    val base = if (dark) DarkColors else LightColors
+    MaterialTheme(
+        colorScheme = if (glass) glassScheme(base, dark) else base,
+        shapes = AppShapes,
+    ) {
+        CompositionLocalProvider(LocalGlass provides glass, content = content)
+    }
+}
+
+/** خلفية ملوّنة متحركة ببطء تظهر من خلف البطاقات الشفافة فتعطي إحساس الزجاج. */
+@Composable
+fun GlassBackground(dark: Boolean, glass: Boolean, content: @Composable () -> Unit) {
+    val bg = if (dark) Color(0xFF0F0B1E) else Color(0xFFF1EEFA)
+    Box(Modifier.fillMaxSize().background(bg)) {
+        if (glass) {
+            val t = rememberInfiniteTransition(label = "blobs")
+            val a by t.animateFloat(0f, 1f, infiniteRepeatable(tween(18000, easing = LinearEasing), RepeatMode.Reverse), label = "a")
+            val b by t.animateFloat(0f, 1f, infiniteRepeatable(tween(26000, easing = LinearEasing), RepeatMode.Reverse), label = "b")
+            val strength = if (dark) 0.55f else 0.42f
+            Canvas(Modifier.fillMaxSize()) {
+                val w = size.width
+                val h = size.height
+                val r = w * 0.85f
+                fun blob(color: Color, cx: Float, cy: Float) {
+                    drawCircle(
+                        Brush.radialGradient(listOf(color.copy(alpha = strength), Color.Transparent), center = Offset(cx, cy), radius = r),
+                        radius = r,
+                        center = Offset(cx, cy),
+                    )
+                }
+                blob(Color(0xFF7C4DFF), w * (0.15f + 0.5f * a), h * (0.12f + 0.15f * b))
+                blob(Color(0xFFFF6FB5), w * (0.95f - 0.5f * b), h * (0.5f + 0.1f * a))
+                blob(Color(0xFF26C6DA), w * (0.2f + 0.4f * b), h * (0.92f - 0.2f * a))
+            }
+        }
+        content()
+    }
 }

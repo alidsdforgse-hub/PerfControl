@@ -92,6 +92,7 @@ fun SettingsTab(vm: AppViewModel, onSetup: () -> Unit) {
     val excl by vm.exclusions.collectAsState()
     val state by vm.shizukuState.collectAsState()
     val theme by vm.themeMode.collectAsState()
+    val glass by vm.glassOn.collectAsState()
     LaunchedEffect(Unit) { vm.loadExclusions() }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = listPadding, verticalArrangement = listSpacing) {
@@ -101,6 +102,14 @@ fun SettingsTab(vm: AppViewModel, onSetup: () -> Unit) {
                 Text("وضع الألوان", fontWeight = FontWeight.SemiBold)
                 ChoiceRow(listOf("تلقائي", "فاتح", "داكن"), theme, true) { vm.setTheme(it) }
             }
+        }
+        item {
+            ToggleCard(
+                "الزجاج السائل",
+                "بطاقات شفافة فوق خلفية ملوّنة متحركة. أوقفه إن أردت مظهراً أبسط أو توفيراً للبطارية.",
+                glass,
+                true,
+            ) { vm.setGlass(it) }
         }
 
         item { SectionTitle("Shizuku") }

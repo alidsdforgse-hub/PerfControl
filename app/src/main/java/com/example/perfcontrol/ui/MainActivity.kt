@@ -58,13 +58,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val mode by vm.themeMode.collectAsState()
+            val glass by vm.glassOn.collectAsState()
             val dark = when (mode) {
                 1 -> false
                 2 -> true
                 else -> isSystemInDarkTheme()
             }
             SystemBars(dark)
-            PerfTheme(dark) {
+            PerfTheme(dark, glass) {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     var crash by remember { mutableStateOf(readCrash()) }
                     val text = crash
@@ -74,7 +75,7 @@ class MainActivity : ComponentActivity() {
                             crash = null
                         }
                     } else {
-                        AppRoot(vm)
+                        GlassBackground(dark, glass) { AppRoot(vm) }
                     }
                 }
             }
@@ -132,6 +133,7 @@ fun AppRoot(vm: AppViewModel) {
     }
 
     Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         bottomBar = {
             if (screen == Screen.Main) {
                 NavigationBar {

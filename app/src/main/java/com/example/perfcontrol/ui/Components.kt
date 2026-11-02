@@ -4,6 +4,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -41,6 +42,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+
+@Composable
+fun glassBorder(): BorderStroke? =
+    if (LocalGlass.current) {
+        BorderStroke(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.65f), Color.White.copy(alpha = 0.08f))))
+    } else {
+        null
+    }
 
 fun statusColor(p: Float): Color = when {
     p < 0.7f -> Good
@@ -100,6 +109,7 @@ fun SoftCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
         modifier.fillMaxWidth().animateContentSize(),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = glassBorder(),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
@@ -166,7 +176,12 @@ fun ActionCard(title: String, desc: String, button: String, enabled: Boolean, on
 
 @Composable
 fun StatTile(title: String, value: String, sub: String, modifier: Modifier = Modifier) {
-    Card(modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+    Card(
+        modifier,
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        border = glassBorder(),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Caption(title)
             Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)

@@ -30,7 +30,7 @@ import kotlinx.coroutines.delay
 fun AppsTab(vm: AppViewModel) {
     var sub by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
-        ScrollableTabRow(selectedTabIndex = sub, edgePadding = 0.dp) {
+        ScrollableTabRow(selectedTabIndex = sub, edgePadding = 0.dp, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
             listOf("الألعاب", "العمليات", "الثقيلة", "الإقلاع", "التجميد", "الإشعارات").forEachIndexed { i, t ->
                 Tab(selected = sub == i, onClick = { sub = i }, text = { Text(t) })
             }

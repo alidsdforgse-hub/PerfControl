@@ -9,4 +9,9 @@ class UiPrefs(ctx: Context) {
     var themeMode: Int
         get() = p.getInt("theme", 0)
         set(v) { p.edit().putInt("theme", v).apply() }
+
+    /** تأثير الزجاج السائل */
+    var glass: Boolean
+        get() = p.getBoolean("glass", true)
+        set(v) { p.edit().putBoolean("glass", v).apply() }
 }

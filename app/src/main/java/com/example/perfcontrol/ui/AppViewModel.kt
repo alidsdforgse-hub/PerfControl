@@ -287,6 +287,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val batterySaver = MutableStateFlow(false)
     val powerSaveEnabled = MutableStateFlow(store.original(POWERSAVE_ACTIVE_KEY) != null)
 
+    val glassOn = MutableStateFlow(uiPrefs.glass)
+    fun setGlass(on: Boolean) {
+        uiPrefs.glass = on
+        glassOn.value = on
+    }
+
     fun setTheme(mode: Int) {
         uiPrefs.themeMode = mode
         themeMode.value = mode
