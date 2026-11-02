@@ -90,7 +90,41 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshShizuku() = shizuku.refresh()
-    fun requestPermission() = shizuku.requestPermission()
+    private var autoAsked = false
+
+    fun requestPermission() {
+        if (shizuku.permissionBlocked()) {
+            message.value = "رفضتَ الإذن سابقاً. في تطبيق Shizuku افتح \"التطبيقات المصرّح لها\" وفعّل متحكم الأداء."
+            openShizukuApp()
+        } else {
+            shizuku.requestPermission()
+        }
+    }
+
+    /** يطلب الإذن تلقائياً مرة واحدة لكل تشغيل إذا كان Shizuku يعمل ولم يُمنح الإذن. */
+    fun autoRequestPermission() {
+        if (!autoAsked && shizukuState.value == ShizukuState.NoPermission) {
+            autoAsked = true
+            shizuku.requestPermission()
+        }
+    }
+
+    fun openShizukuApp() {
+        val app = getApplication<Application>()
+        app.packageManager.getLaunchIntentForPackage(ShizukuManager.SHIZUKU_PACKAGE)
+            ?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            ?.let { runCatching { app.startActivity(it) } }
+    }
+
+    /** يُستدعى عند الضغط على ميزة تحتاج Shizuku وهو غير جاهز. */
+    fun needShizuku() {
+        message.value = when (shizukuState.value) {
+            ShizukuState.NotInstalled -> "ثبّت تطبيق Shizuku أولاً."
+            ShizukuState.NotRunning -> "شغّل Shizuku أولاً ثم ارجع."
+            else -> "يلزم منح الإذن لهذا التطبيق."
+        }
+        if (shizukuState.value == ShizukuState.NoPermission) requestPermission()
+    }
     fun consumeMessage() { message.value = null }
 
     private fun protection() = AppProtection(ProtectionContext(device.dynamicProtected(), store.exclusions()))

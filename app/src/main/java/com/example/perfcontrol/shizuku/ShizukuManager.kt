@@ -55,6 +55,13 @@ class ShizukuManager(private val context: Context) {
         }
     }
 
+    /** true إذا اختار المستخدم سابقاً "رفض وعدم السؤال" فلن يظهر مربع الإذن مجدداً. */
+    fun permissionBlocked(): Boolean = try {
+        Shizuku.pingBinder() && !Shizuku.isPreV11() && Shizuku.shouldShowRequestPermissionRationale()
+    } catch (_: Exception) {
+        false
+    }
+
     private fun bind() {
         if (service != null || binding) return
         try {

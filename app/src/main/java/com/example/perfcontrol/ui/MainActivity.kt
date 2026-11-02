@@ -88,6 +88,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         vm.refreshShizuku()
+        vm.autoRequestPermission()
         vm.loadFallback()
         vm.syncWatch()
     }
@@ -156,7 +157,7 @@ fun AppRoot(vm: AppViewModel) {
             when (screen) {
                 Screen.Setup -> SetupScreen(state, vm) { screen = Screen.Main }
                 Screen.Main -> {
-                    if (state != ShizukuState.Ready && tab != 4) ShizukuBanner(state) { screen = Screen.Setup }
+                    if (state != ShizukuState.Ready && tab != 4) ShizukuBanner(state, onGrant = { vm.requestPermission() }, onSetup = { screen = Screen.Setup })
                     Crossfade(targetState = tab, label = "tabs") { t ->
                         when (t) {
                             0 -> HomeTab(vm)

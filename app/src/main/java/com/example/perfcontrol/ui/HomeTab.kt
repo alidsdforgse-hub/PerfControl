@@ -117,11 +117,11 @@ fun HomeTab(vm: AppViewModel) {
                 )
             }
         }
-        item { PrimaryButton("رفع الأداء الآن") { showBoost = true } }
+        item { PrimaryButton("رفع الأداء الآن") { if (ready) showBoost = true else vm.needShizuku() } }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MiniToggle("وضع الألعاب", gameOn, ready, Modifier.weight(1f)) { vm.toggleGame() }
-                MiniToggle("توفير الطاقة", saveOn, ready, Modifier.weight(1f)) { vm.togglePowerSave() }
+                MiniToggle("وضع الألعاب", gameOn, true, Modifier.weight(1f)) { if (ready) vm.toggleGame() else vm.needShizuku() }
+                MiniToggle("توفير الطاقة", saveOn, true, Modifier.weight(1f)) { if (ready) vm.togglePowerSave() else vm.needShizuku() }
             }
         }
         item { LiveCharts(hist) }

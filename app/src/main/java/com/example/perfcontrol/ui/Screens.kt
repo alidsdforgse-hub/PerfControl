@@ -37,7 +37,7 @@ private fun stateText(s: ShizukuState) = when (s) {
 }
 
 @Composable
-fun ShizukuBanner(state: ShizukuState, onSetup: () -> Unit) {
+fun ShizukuBanner(state: ShizukuState, onGrant: () -> Unit, onSetup: () -> Unit) {
     Card(
         Modifier.fillMaxWidth().padding(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
@@ -49,6 +49,9 @@ fun ShizukuBanner(state: ShizukuState, onSetup: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
+            if (state == ShizukuState.NoPermission) {
+                TextButton(onClick = onGrant) { Text("منح الإذن") }
+            }
             TextButton(onClick = onSetup) { Text("إعداد") }
         }
     }
