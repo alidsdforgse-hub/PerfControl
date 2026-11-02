@@ -191,6 +191,10 @@ fun GamesTab(vm: AppViewModel) {
     val autoGame by vm.autoGame.collectAsState()
     val dnd by vm.gameDnd.collectAsState()
     val hasUsage by vm.hasUsageAccess.collectAsState()
+    val gMode by vm.globalMode.collectAsState()
+    val perGame by vm.perGame.collectAsState()
+    val overlayOn by vm.overlayOn.collectAsState()
+    val overlayPerm by vm.overlayPerm.collectAsState()
     var editing by remember { mutableStateOf(false) }
     val ready = state == ShizukuState.Ready
 
@@ -214,6 +218,23 @@ fun GamesTab(vm: AppViewModel) {
             }
         }
         if (gameOn) item { PrimaryButton("إيقاف وضع الألعاب وعرض التقرير") { vm.toggleGame() } }
+        item {
+            SoftCard {
+                Text("وضع الأداء", fontWeight = FontWeight.SemiBold)
+                ChoiceRow(com.example.perfcontrol.core.PerfMode.values().map { it.title }, gMode, true) { vm.setGlobalMode(it) }
+                Caption(com.example.perfcontrol.core.PerfMode.values()[gMode].desc)
+                Caption("هذه إعدادات برمجية (معدل التحديث والرسوم وإيقاف الخلفية)، ولا تتحكم في مروحة أو عتاد الجهاز.")
+            }
+        }
+        item {
+            ToggleCard(
+                "شريط المعلومات أثناء اللعب",
+                if (overlayPerm) "يعرض الحرارة والبطارية والذاكرة والوقت أعلى الشاشة داخل اللعبة. لا يعرض FPS."
+                else "يحتاج إذن \"العرض فوق التطبيقات\". فعّل الخيار وسيفتح الإعداد.",
+                overlayOn,
+                true,
+            ) { vm.setOverlay(it) }
+        }
         item {
             ToggleCard(
                 "تشغيل تلقائي عند فتح اللعبة",
@@ -259,6 +280,12 @@ fun GamesTab(vm: AppViewModel) {
                     }
                     TextButton(onClick = { vm.launchGame(g.pkg) }) { Text("العب") }
                 }
+                Caption("وضع هذه اللعبة:")
+                ChoiceRow(
+                    listOf("افتراضي") + com.example.perfcontrol.core.PerfMode.values().map { it.title },
+                    (perGame[g.pkg] ?: -1) + 1,
+                    true,
+                ) { vm.setGameMode(g.pkg, if (it == 0) null else it - 1) }
             }
         }
         item {

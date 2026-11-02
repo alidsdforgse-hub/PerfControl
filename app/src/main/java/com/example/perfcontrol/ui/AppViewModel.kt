@@ -263,7 +263,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleGame() = launchBusy {
         val p = protection()
         val booster = Booster(runner, ProcessManager(runner, p), cleaner, p)
-        val g = GameMode(runner, booster, store, maxHz(), autoPrefs.gameDnd)
+        val prof = profileFor(null)
+        val g = GameMode(runner, booster, store, prof.hz, autoPrefs.gameDnd, prof.anim, prof.boost)
         if (!g.isEnabled()) disablePowerSaveIfActive()
         val r = if (g.isEnabled()) {
             com.example.perfcontrol.background.BgActions.restoreThermal(runner, store)
@@ -533,7 +534,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 try {
                     val p = protection()
                     val b = Booster(runner, ProcessManager(runner, p), cleaner, p)
-                    val g = GameMode(runner, b, store, maxHz(), autoPrefs.gameDnd)
+                    val prof = profileFor(pkg)
+                    val g = GameMode(runner, b, store, prof.hz, autoPrefs.gameDnd, prof.anim, prof.boost)
                     disablePowerSaveIfActive()
                     val r = g.enable(
                         sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName }
@@ -563,14 +565,56 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- Game Turbo وحارس الحرارة ----
-    private fun maxHz(): Int = refreshRates.value.maxOrNull() ?: 120
+    private fun profileFor(pkg: String?): com.example.perfcontrol.core.GameProfile =
+        com.example.perfcontrol.core.GameProfiles.forMode(
+            com.example.perfcontrol.core.PerfMode.values()[autoPrefs.modeFor(pkg)],
+            refreshRates.value,
+        )
+
+    val globalMode = MutableStateFlow(autoPrefs.globalMode)
+    val perGame = MutableStateFlow(autoPrefs.perGameModes())
+    val overlayOn = MutableStateFlow(autoPrefs.overlay)
+    val overlayPerm = MutableStateFlow(false)
+
+    fun setGlobalMode(m: Int) {
+        autoPrefs.globalMode = m
+        globalMode.value = m
+    }
+
+    /** mode: null = يتبع الوضع العام */
+    fun setGameMode(pkg: String, mode: Int?) {
+        autoPrefs.setGameModeOf(pkg, mode)
+        perGame.value = autoPrefs.perGameModes()
+    }
+
+    fun setOverlay(on: Boolean) {
+        autoPrefs.overlay = on
+        overlayOn.value = on
+        syncWatch()
+        if (on && !android.provider.Settings.canDrawOverlays(getApplication())) {
+            message.value = "امنح إذن \"العرض فوق التطبيقات\" ليظهر الشريط أثناء اللعب"
+            openOverlaySettings()
+        }
+    }
+
+    fun openOverlaySettings() {
+        val app = getApplication<Application>()
+        val i = android.content.Intent(
+            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            android.net.Uri.parse("package:" + app.packageName),
+        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { app.startActivity(i) }
+    }
 
     val autoGame = MutableStateFlow(autoPrefs.autoGame)
     val gameDnd = MutableStateFlow(autoPrefs.gameDnd)
     val thermalOn = MutableStateFlow(autoPrefs.thermalGuard)
     val thermalLimit = MutableStateFlow(autoPrefs.thermalLimit)
 
-    fun syncWatch() = WatchService.sync(getApplication())
+    fun syncWatch() {
+        overlayPerm.value = android.provider.Settings.canDrawOverlays(getApplication())
+        WatchService.sync(getApplication())
+    }
 
     fun setAutoGame(on: Boolean) {
         autoPrefs.autoGame = on

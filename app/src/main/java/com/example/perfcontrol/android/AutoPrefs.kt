@@ -54,4 +54,22 @@ class AutoPrefs(ctx: Context) {
     var thermalLimit: Int
         get() = p.getInt("thermal_limit", 42)
         set(v) { p.edit().putInt("thermal_limit", v).apply() }
+
+    /** وضع الأداء العام: 0 هادئ، 1 متوازن، 2 أداء، 3 أقصى */
+    var globalMode: Int
+        get() = p.getInt("global_mode", 2).coerceIn(0, 3)
+        set(v) { p.edit().putInt("global_mode", v.coerceIn(0, 3)).apply() }
+
+    /** وضع خاص بلعبة، أو null إن كانت تتبع الوضع العام */
+    fun gameModeOf(pkg: String): Int? = p.getInt("pm_$pkg", -1).takeIf { it in 0..3 }
+    fun setGameModeOf(pkg: String, mode: Int?) {
+        p.edit().apply { if (mode == null) remove("pm_$pkg") else putInt("pm_$pkg", mode) }.apply()
+    }
+    fun perGameModes(): Map<String, Int> =
+        p.all.filterKeys { it.startsWith("pm_") }.mapNotNull { (k, v) -> (v as? Int)?.let { k.removePrefix("pm_") to it } }.toMap()
+    fun modeFor(pkg: String?): Int = (pkg?.let { gameModeOf(it) }) ?: globalMode
+
+    var overlay: Boolean
+        get() = p.getBoolean("overlay", false)
+        set(v) { p.edit().putBoolean("overlay", v).apply() }
 }

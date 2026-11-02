@@ -51,10 +51,10 @@ class SettingsApplier(
     }
 }
 
-internal fun gameSettings(hz: Int, dnd: Boolean): List<SettingChange> = buildList {
-    add(SettingChange("global", "window_animation_scale", "0.5"))
-    add(SettingChange("global", "transition_animation_scale", "0.5"))
-    add(SettingChange("global", "animator_duration_scale", "0.5"))
+internal fun gameSettings(hz: Int, dnd: Boolean, anim: String = "0.5"): List<SettingChange> = buildList {
+    add(SettingChange("global", "window_animation_scale", anim))
+    add(SettingChange("global", "transition_animation_scale", anim))
+    add(SettingChange("global", "animator_duration_scale", anim))
     add(SettingChange("system", "min_refresh_rate", "$hz"))
     add(SettingChange("system", "peak_refresh_rate", "$hz"))
     // 1 = المقاطعات المهمة فقط (عدم الإزعاج)
@@ -78,8 +78,10 @@ class GameMode(
     store: StateStore,
     private val hz: Int = 120,
     private val dnd: Boolean = false,
+    private val anim: String = "0.5",
+    private val boost: Boolean = true,
 ) {
-    private val GAME_SETTINGS get() = gameSettings(hz, dnd)
+    private val GAME_SETTINGS get() = gameSettings(hz, dnd, anim)
     private val ALL_SETTINGS get() = gameSettings(hz, true)
     private val applier = SettingsApplier(runner, store, "game")
 
@@ -87,7 +89,7 @@ class GameMode(
 
     suspend fun enable(candidates: List<String>): GameModeResult {
         val applied = applier.apply(GAME_SETTINGS)
-        val report = booster.boost(candidates)
+        val report = booster.boost(if (boost) candidates else emptyList())
         applier.markActive(true)
         val stopped = report.batch.succeeded.size
         val ok = applied > 0 || stopped > 0

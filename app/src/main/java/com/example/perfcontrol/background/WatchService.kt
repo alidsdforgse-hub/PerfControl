@@ -59,6 +59,7 @@ class WatchService : Service() {
     }
 
     override fun onDestroy() {
+        GameOverlay.hide(applicationContext)
         job?.cancel()
         job = null
         super.onDestroy()
@@ -77,7 +78,7 @@ class WatchService : Service() {
         var retryAt = 0L
 
         while (currentCoroutineContext().isActive) {
-            if (!prefs.autoGame && !prefs.thermalGuard) {
+            if (!prefs.autoGame && !prefs.thermalGuard && !prefs.overlay) {
                 stopSelf()
                 return
             }
@@ -105,6 +106,19 @@ class WatchService : Service() {
                             GameAction.None -> {}
                         }
                     }
+                }
+                if (prefs.overlay) {
+                    val gameOn = store.original(GAME_ACTIVE_KEY) != null
+                    if (gameOn && GameOverlay.canShow(ctx)) {
+                        val st = stats.read()
+                        val ram = 100 - (st.ramAvailMb * 100 / st.ramTotalMb.coerceAtLeast(1L)).toInt()
+                        val clock = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())
+                        GameOverlay.show(ctx, "حرارة ${"%.1f".format(st.tempC)}°   بطارية ${st.batteryPercent}%   رام $ram%   $clock")
+                    } else {
+                        GameOverlay.hide(ctx)
+                    }
+                } else {
+                    GameOverlay.hide(ctx)
                 }
                 if (prefs.thermalGuard) {
                     val temp = stats.read().tempC
@@ -159,7 +173,7 @@ class WatchService : Service() {
             val p = AutoPrefs(ctx)
             val i = Intent(ctx, WatchService::class.java)
             try {
-                if (p.autoGame || p.thermalGuard) ctx.startForegroundService(i) else ctx.stopService(i)
+                if (p.autoGame || p.thermalGuard || p.overlay) ctx.startForegroundService(i) else ctx.stopService(i)
             } catch (_: Exception) {
             }
         }
@@ -169,5 +183,62 @@ class WatchService : Service() {
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) WatchService.sync(context)
+    }
+}
+
+/** شريط معلومات صغير يطفو أعلى الشاشة أثناء اللعب (لا يلتقط اللمس). */
+object GameOverlay {
+    private var view: android.widget.TextView? = null
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    fun canShow(ctx: Context): Boolean = android.provider.Settings.canDrawOverlays(ctx)
+
+    fun show(ctx: Context, text: String) {
+        val app = ctx.applicationContext
+        handler.post {
+            try {
+                val wm = app.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
+                var v = view
+                if (v == null) {
+                    v = android.widget.TextView(app).apply {
+                        setTextColor(android.graphics.Color.WHITE)
+                        textSize = 12f
+                        setPadding(32, 10, 32, 10)
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            setColor(0xAA000000.toInt())
+                            cornerRadius = 48f
+                        }
+                    }
+                    val lp = android.view.WindowManager.LayoutParams(
+                        android.view.WindowManager.LayoutParams.WRAP_CONTENT,
+                        android.view.WindowManager.LayoutParams.WRAP_CONTENT,
+                        android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                            android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                        android.graphics.PixelFormat.TRANSLUCENT,
+                    ).apply {
+                        gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL
+                        y = 12
+                    }
+                    wm.addView(v, lp)
+                    view = v
+                }
+                v.text = text
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    fun hide(ctx: Context) {
+        val app = ctx.applicationContext
+        handler.post {
+            try {
+                val v = view ?: return@post
+                (app.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).removeView(v)
+            } catch (_: Exception) {
+            }
+            view = null
+        }
     }
 }

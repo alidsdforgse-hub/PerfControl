@@ -5,7 +5,9 @@ import com.example.perfcontrol.PerfApp
 import com.example.perfcontrol.android.AutoPrefs
 import com.example.perfcontrol.android.DeviceInfo
 import com.example.perfcontrol.android.StatsReader
+import com.example.perfcontrol.core.GameProfiles
 import com.example.perfcontrol.core.GameSessionReport
+import com.example.perfcontrol.core.PerfMode
 import com.example.perfcontrol.core.HeavyApps
 import com.example.perfcontrol.core.SettingChange
 import com.example.perfcontrol.core.SettingsApplier
@@ -55,8 +57,8 @@ object BgActions {
         val r = runner(ctx) ?: return NOT_READY
         val store = PrefsStateStore(ctx)
         val prefs = AutoPrefs(ctx)
-        val hz = DeviceInfo(ctx).supportedRefreshRates().maxOrNull() ?: 120
-        val game = GameMode(r, booster(ctx, r, store), store, hz, prefs.gameDnd)
+        val prof = GameProfiles.forMode(PerfMode.values()[prefs.modeFor(keep)], DeviceInfo(ctx).supportedRefreshRates())
+        val game = GameMode(r, booster(ctx, r, store), store, prof.hz, prefs.gameDnd, prof.anim, prof.boost)
         if (game.isEnabled() || forceOff) {
             if (!game.isEnabled()) return "وضع الألعاب متوقف أصلاً"
             restoreThermal(r, store)
