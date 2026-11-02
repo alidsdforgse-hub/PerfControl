@@ -2,7 +2,10 @@ package com.example.perfcontrol.background
 
 import android.content.Context
 import com.example.perfcontrol.PerfApp
+import com.example.perfcontrol.android.AutoPrefs
 import com.example.perfcontrol.android.DeviceInfo
+import com.example.perfcontrol.android.StatsReader
+import com.example.perfcontrol.core.GameSessionReport
 import com.example.perfcontrol.android.PrefsStateStore
 import com.example.perfcontrol.core.AppProtection
 import com.example.perfcontrol.core.Booster
@@ -48,10 +51,14 @@ object BgActions {
         val game = GameMode(r, booster(ctx, r, store), store)
         if (game.isEnabled() || forceOff) {
             if (!game.isEnabled()) return "وضع الألعاب متوقف أصلاً"
-            return game.disable().message
+            val msg = game.disable().message
+            val report = GameSession.finish(ctx)
+            return if (report != null) "$msg\n$report" else msg
         }
         if (store.original(POWERSAVE_ACTIVE_KEY) != null) PowerSaveMode(r, store).disable()
-        return game.enable(candidates(r)).message
+        val res = game.enable(candidates(r))
+        if (res.ok) GameSession.start(ctx)
+        return res.message
     }
 
     suspend fun boost(ctx: Context): String {
@@ -68,5 +75,29 @@ object BgActions {
             is CommandResult.Success -> "تم تنظيف كاش التطبيقات"
             is CommandResult.Failure -> "تعذر التنظيف: ${res.reason}"
         }
+    }
+}
+
+object GameSession {
+    fun start(ctx: Context) {
+        val st = StatsReader(ctx).read()
+        val p = AutoPrefs(ctx)
+        p.sessionStart = System.currentTimeMillis()
+        p.sessionBattery = st.batteryPercent
+        p.sessionTemp = st.tempC
+    }
+
+    /** يعيد نص التقرير ويحفظه، أو null إن لم تكن هناك جلسة. */
+    fun finish(ctx: Context): String? {
+        val p = AutoPrefs(ctx)
+        if (p.sessionStart <= 0L) return null
+        val st = StatsReader(ctx).read()
+        val text = GameSessionReport.format(
+            System.currentTimeMillis() - p.sessionStart,
+            p.sessionBattery, st.batteryPercent, p.sessionTemp, st.tempC,
+        )
+        p.lastReport = text
+        p.sessionStart = 0L
+        return text
     }
 }

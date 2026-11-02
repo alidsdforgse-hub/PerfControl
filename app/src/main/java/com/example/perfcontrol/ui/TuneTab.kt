@@ -34,6 +34,7 @@ fun TuneTab(vm: AppViewModel) {
     var showPicker by remember { mutableStateOf(false) }
     var benchPkg by remember { mutableStateOf<String?>(null) }
     val gameMin by vm.gameMinutes.collectAsState()
+    val rates by vm.refreshRates.collectAsState()
     val cleanH by vm.cleanHours.collectAsState()
     val shortcuts by vm.shortcutsOn.collectAsState()
     val rows by vm.benchRows.collectAsState()
@@ -58,8 +59,8 @@ fun TuneTab(vm: AppViewModel) {
         item {
             SoftCard {
                 Text("معدل تحديث الشاشة", fontWeight = FontWeight.SemiBold)
-                Caption("الأعلى أنعم، والأقل يوفّر البطارية. \"تلقائي\" يعيد ضبط النظام.")
-                ChoiceRow(listOf("تلقائي", "60", "90", "120"), refresh, ready) { vm.setRefresh(it) }
+                Caption("الأعلى أنعم، والأقل يوفّر البطارية. الخيارات مأخوذة من شاشة جهازك. \"تلقائي\" يعيد ضبط النظام.")
+                ChoiceRow(listOf("تلقائي") + rates.map { "$it" }, refresh, ready) { vm.setRefresh(it) }
             }
         }
 

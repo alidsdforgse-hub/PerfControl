@@ -41,6 +41,7 @@ import com.example.perfcontrol.shizuku.ShizukuCommandRunner
 import com.example.perfcontrol.shizuku.ShizukuManager
 import com.example.perfcontrol.android.AutoPrefs
 import com.example.perfcontrol.background.AutoScheduler
+import com.example.perfcontrol.background.GameSession
 import com.example.perfcontrol.background.Shortcuts
 import com.example.perfcontrol.core.BenchRow
 import com.example.perfcontrol.core.BenchmarkRunner
@@ -234,12 +235,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             g.enable(sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName } ?: emptyList())
         }
         gameEnabled.value = g.isEnabled()
+        var extra = ""
         if (g.isEnabled()) {
             AutoScheduler.startGameTimer(getApplication(), autoPrefs.gameMinutes)
+            GameSession.start(getApplication())
         } else {
             AutoScheduler.cancelGameTimer(getApplication())
+            GameSession.finish(getApplication())?.let { extra = "\n$it" }
+            lastReport.value = autoPrefs.lastReport
         }
-        message.value = r.message
+        message.value = r.message + extra
     }
 
     fun optimizeApps() = launchBusy {
@@ -324,11 +329,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             refreshChoice.value = when (val v = tuner.peakRefreshRate()) {
                 "null" -> 0
-                else -> when (v?.toFloatOrNull()?.toInt()) {
-                    60 -> 1
-                    90 -> 2
-                    120 -> 3
-                    else -> null
+                else -> {
+                    val idx = refreshRates.value.indexOf(v?.toFloatOrNull()?.let { Math.round(it) })
+                    if (idx >= 0) idx + 1 else null
                 }
             }
             batterySaver.value = tuner.isBatterySaver()
@@ -343,7 +346,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setRefresh(choice: Int) = launchBusy {
-        val hz = listOf<Int?>(null, 60, 90, 120)[choice]
+        val hz = if (choice == 0) null else refreshRates.value.getOrNull(choice - 1)
         val r = tuner.setRefreshRate(hz)
         if (r is CommandResult.Success) refreshChoice.value = choice
         message.value = if (r is CommandResult.Success) "تم ضبط معدل التحديث" else "تعذر الضبط: ${(r as CommandResult.Failure).reason}"
@@ -449,6 +452,67 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } finally {
             bench.returnToSelf()
             benchStage.value = null
+        }
+    }
+
+    // ---- الألعاب والجهاز ----
+    val refreshRates = MutableStateFlow(device.supportedRefreshRates())
+    val games = MutableStateFlow(autoPrefs.games)
+    val lastReport = MutableStateFlow(autoPrefs.lastReport)
+    val detectedGames = MutableStateFlow<Set<String>>(emptySet())
+    val deviceTitle: String = device.deviceTitle()
+
+    fun loadGames() {
+        viewModelScope.launch(Dispatchers.IO) {
+            allUserApps.value = device.userApps()
+            val detected = device.detectedGames()
+            detectedGames.value = detected
+            if (autoPrefs.games.isEmpty() && detected.isNotEmpty() && !autoPrefs.gamesInitialized) {
+                autoPrefs.games = detected
+                games.value = detected
+            }
+            autoPrefs.gamesInitialized = true
+        }
+    }
+
+    fun toggleGameApp(pkg: String, on: Boolean) {
+        val s = autoPrefs.games.toMutableSet()
+        if (on) s += pkg else s -= pkg
+        autoPrefs.games = s
+        games.value = s
+    }
+
+    /** يشغّل وضع الألعاب (إن لم يكن يعمل) ثم يفتح اللعبة. */
+    fun launchGame(pkg: String) {
+        viewModelScope.launch {
+            if (!gameEnabled.value && shizukuState.value == ShizukuState.Ready) {
+                busy.value = true
+                try {
+                    val p = protection()
+                    val b = Booster(runner, ProcessManager(runner, p), cleaner, p)
+                    val g = GameMode(runner, b, store)
+                    disablePowerSaveIfActive()
+                    val r = g.enable(sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName } ?: emptyList())
+                    gameEnabled.value = g.isEnabled()
+                    if (g.isEnabled()) {
+                        AutoScheduler.startGameTimer(getApplication(), autoPrefs.gameMinutes)
+                        GameSession.start(getApplication())
+                    }
+                    message.value = r.message
+                } catch (e: Exception) {
+                    message.value = e.message ?: "حدث خطأ"
+                } finally {
+                    busy.value = false
+                }
+            }
+            val app = getApplication<Application>()
+            val intent = app.packageManager.getLaunchIntentForPackage(pkg)
+            if (intent != null) {
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                app.startActivity(intent)
+            } else {
+                message.value = "تعذر فتح اللعبة"
+            }
         }
     }
 }

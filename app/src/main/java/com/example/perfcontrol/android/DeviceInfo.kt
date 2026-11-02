@@ -15,6 +15,9 @@ import android.provider.Settings
 import android.provider.Telephony
 import android.telecom.TelecomManager
 import android.content.ComponentName
+import android.hardware.display.DisplayManager
+import android.os.Build
+import android.view.Display
 import com.example.perfcontrol.core.HealthInput
 import java.io.File
 
@@ -49,6 +52,30 @@ class DeviceInfo(private val ctx: Context) {
     }.getOrDefault(emptyList())
 
     @Suppress("DEPRECATION")
+    /** معدلات التحديث التي تدعمها شاشة هذا الجهاز فعلاً. */
+    fun supportedRefreshRates(): List<Int> = runCatching {
+        val dm = ctx.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        dm.getDisplay(Display.DEFAULT_DISPLAY).supportedModes
+            .map { Math.round(it.refreshRate) }
+            .filter { it in 30..240 }
+            .distinct()
+            .sorted()
+    }.getOrDefault(listOf(60, 90, 120))
+
+    /** التطبيقات المصنّفة ألعاباً من النظام. */
+    @Suppress("DEPRECATION")
+    fun detectedGames(): Set<String> = runCatching {
+        pm.getInstalledApplications(0)
+            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 && it.category == ApplicationInfo.CATEGORY_GAME }
+            .map { it.packageName }
+            .toSet()
+    }.getOrDefault(emptySet())
+
+    fun deviceTitle(): String {
+        val soc = if (Build.VERSION.SDK_INT >= 31 && Build.SOC_MODEL.isNotBlank() && Build.SOC_MODEL != "unknown") " · ${Build.SOC_MODEL}" else ""
+        return "${Build.MODEL}$soc"
+    }
+
     fun bootCapableApps(): List<AppEntry> = runCatching {
         pm.getInstalledPackages(PackageManager.GET_PERMISSIONS)
             .filter { pi ->

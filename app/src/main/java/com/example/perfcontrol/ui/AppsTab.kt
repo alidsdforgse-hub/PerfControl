@@ -31,15 +31,16 @@ fun AppsTab(vm: AppViewModel) {
     var sub by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
         ScrollableTabRow(selectedTabIndex = sub, edgePadding = 0.dp) {
-            listOf("العمليات", "الثقيلة", "الإقلاع", "التجميد", "الإشعارات").forEachIndexed { i, t ->
+            listOf("الألعاب", "العمليات", "الثقيلة", "الإقلاع", "التجميد", "الإشعارات").forEachIndexed { i, t ->
                 Tab(selected = sub == i, onClick = { sub = i }, text = { Text(t) })
             }
         }
         when (sub) {
-            0 -> ProcessesTab(vm)
-            1 -> HeavyTab(vm)
-            2 -> StartupTab(vm)
-            3 -> FreezeTab(vm)
+            0 -> GamesTab(vm)
+            1 -> ProcessesTab(vm)
+            2 -> HeavyTab(vm)
+            3 -> StartupTab(vm)
+            4 -> FreezeTab(vm)
             else -> ProtectTab(vm)
         }
     }
@@ -175,6 +176,79 @@ fun ProtectTab(vm: AppViewModel) {
         }
         items(apps, key = { it.pkg }) { app ->
             ToggleCard(app.label, app.pkg, app.pkg in prot, ready) { vm.setNotifProtected(app.pkg, it) }
+        }
+    }
+}
+
+@Composable
+fun GamesTab(vm: AppViewModel) {
+    val state by vm.shizukuState.collectAsState()
+    val apps by vm.allUserApps.collectAsState()
+    val games by vm.games.collectAsState()
+    val detected by vm.detectedGames.collectAsState()
+    val report by vm.lastReport.collectAsState()
+    val gameOn by vm.gameEnabled.collectAsState()
+    var editing by remember { mutableStateOf(false) }
+    val ready = state == ShizukuState.Ready
+
+    LaunchedEffect(Unit) { vm.loadGames() }
+
+    val myGames = apps.filter { it.pkg in games }
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = listPadding, verticalArrangement = listSpacing) {
+        item {
+            HeroCard {
+                Text("مركز الألعاب", color = androidx.compose.ui.graphics.Color.White, fontWeight = FontWeight.Bold)
+                Text(
+                    "اضغط على أي لعبة: يشغّل وضع الألعاب ثم يفتحها، وعند الإيقاف تظهر لك تقرير الجلسة.",
+                    color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                )
+                Text(
+                    if (gameOn) "وضع الألعاب يعمل الآن" else "وضع الألعاب متوقف",
+                    color = androidx.compose.ui.graphics.Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+        if (gameOn) item { PrimaryButton("إيقاف وضع الألعاب وعرض التقرير") { vm.toggleGame() } }
+        if (report.isNotBlank()) {
+            item {
+                SoftCard {
+                    Text("تقرير آخر جلسة", fontWeight = FontWeight.SemiBold)
+                    Caption(report)
+                }
+            }
+        }
+        item { SectionTitle("ألعابي") }
+        if (myGames.isEmpty()) {
+            item { SoftCard { Caption("لم تُضَف ألعاب بعد. اضغط \"تعديل القائمة\" واختر ألعابك.") } }
+        }
+        items(myGames, key = { "g_" + it.pkg }) { g ->
+            SoftCard {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(g.label, fontWeight = FontWeight.SemiBold)
+                        Caption(if (ready) "تشغيل مع وضع الألعاب" else "تشغيل عادي (Shizuku غير جاهز)")
+                    }
+                    TextButton(onClick = { vm.launchGame(g.pkg) }) { Text("العب") }
+                }
+            }
+        }
+        item {
+            androidx.compose.material3.OutlinedButton(
+                onClick = { editing = !editing },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (editing) "تم" else "تعديل القائمة") }
+        }
+        if (editing) {
+            items(apps, key = { "e_" + it.pkg }) { a ->
+                ToggleCard(
+                    a.label,
+                    if (a.pkg in detected) "لعبة (اكتشفها النظام)" else a.pkg,
+                    a.pkg in games,
+                    true,
+                ) { vm.toggleGameApp(a.pkg, it) }
+            }
         }
     }
 }

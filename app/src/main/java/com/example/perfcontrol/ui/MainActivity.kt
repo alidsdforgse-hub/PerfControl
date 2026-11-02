@@ -7,6 +7,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -153,12 +154,14 @@ fun AppRoot(vm: AppViewModel) {
                 Screen.Setup -> SetupScreen(state, vm) { screen = Screen.Main }
                 Screen.Main -> {
                     if (state != ShizukuState.Ready && tab != 4) ShizukuBanner(state) { screen = Screen.Setup }
-                    when (tab) {
-                        0 -> HomeTab(vm)
-                        1 -> TuneTab(vm)
-                        2 -> AppsTab(vm)
-                        3 -> HealthTab(vm)
-                        else -> SettingsTab(vm) { screen = Screen.Setup }
+                    Crossfade(targetState = tab, label = "tabs") { t ->
+                        when (t) {
+                            0 -> HomeTab(vm)
+                            1 -> TuneTab(vm)
+                            2 -> AppsTab(vm)
+                            3 -> HealthTab(vm)
+                            else -> SettingsTab(vm) { screen = Screen.Setup }
+                        }
                     }
                 }
             }

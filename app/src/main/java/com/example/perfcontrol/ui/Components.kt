@@ -1,6 +1,9 @@
 package com.example.perfcontrol.ui
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -74,12 +77,17 @@ fun GaugeRing(
 }
 
 @Composable
-fun HeroCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun HeroCard(
+    modifier: Modifier = Modifier,
+    accent: Color = Color(0xFF6A3DF0),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val a by animateColorAsState(accent, label = "hero")
     Column(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(28.dp))
-            .background(Brush.linearGradient(listOf(Color(0xFF6A3DF0), Color(0xFF2A1070))))
+            .background(Brush.linearGradient(listOf(a, lerp(a, Color.Black, 0.6f))))
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         content = content,
@@ -89,7 +97,8 @@ fun HeroCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
 @Composable
 fun SoftCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
-        modifier.fillMaxWidth(),
+        modifier.fillMaxWidth().animateContentSize(),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)

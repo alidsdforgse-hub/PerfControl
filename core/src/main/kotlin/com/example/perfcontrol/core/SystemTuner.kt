@@ -3,7 +3,7 @@ package com.example.perfcontrol.core
 /** ضبط مباشر لإعدادات النظام (قيم محددة مسبقاً فقط لتجنب حقن الأوامر). */
 class SystemTuner(private val runner: CommandRunner) {
     private val allowedScales = setOf("0", "0.5", "1")
-    private val allowedHz = setOf(60, 90, 120)
+    private val allowedHz = 30..240
 
     private suspend fun read(ns: String, key: String): String? =
         (runner.run("settings get $ns $key") as? CommandResult.Success)?.output?.trim()

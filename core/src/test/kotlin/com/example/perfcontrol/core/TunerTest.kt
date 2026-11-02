@@ -41,7 +41,7 @@ class TunerTest {
 
     @Test fun unsupportedRefreshRateRejected() = runBlocking {
         val r = ok()
-        assertTrue(SystemTuner(r).setRefreshRate(55) is CommandResult.Failure)
+        assertTrue(SystemTuner(r).setRefreshRate(500) is CommandResult.Failure)
         assertTrue(r.log.isEmpty())
     }
 

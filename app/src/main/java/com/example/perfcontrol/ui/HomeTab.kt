@@ -1,5 +1,7 @@
 package com.example.perfcontrol.ui
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,8 +35,13 @@ fun HomeTab(vm: AppViewModel) {
     val gameOn by vm.gameEnabled.collectAsState()
     val saveOn by vm.powerSaveEnabled.collectAsState()
     val hist by vm.history.collectAsState()
+    val gamePkgs by vm.games.collectAsState()
+    val allApps by vm.allUserApps.collectAsState()
+    val myGames = allApps.filter { it.pkg in gamePkgs }
     var showBoost by remember { mutableStateOf(false) }
     val ready = state == ShizukuState.Ready
+
+    LaunchedEffect(Unit) { vm.loadGames() }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -46,8 +53,13 @@ fun HomeTab(vm: AppViewModel) {
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = listPadding, verticalArrangement = listSpacing) {
         item {
-            HeroCard {
-                Text("متحكم الأداء", color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.bodyMedium)
+            val accent = when {
+                (report?.score ?: 100) >= 80 -> Color(0xFF6A3DF0)
+                (report?.score ?: 100) >= 50 -> Color(0xFFB36B00)
+                else -> Color(0xFFA12B2B)
+            }
+            HeroCard(accent = accent) {
+                Text(vm.deviceTitle, color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.bodyMedium)
                 Text(
                     report?.let { "حالة الجهاز: ${it.label}" } ?: "جارٍ الفحص...",
                     color = Color.White,
@@ -113,6 +125,16 @@ fun HomeTab(vm: AppViewModel) {
             }
         }
         item { LiveCharts(hist) }
+        if (myGames.isNotEmpty()) {
+            item { SectionTitle("العب الآن") }
+            item {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    myGames.take(6).forEach { g ->
+                        androidx.compose.material3.FilledTonalButton(onClick = { vm.launchGame(g.pkg) }) { Text(g.label) }
+                    }
+                }
+            }
+        }
         val top = sample?.processes?.sortedByDescending { it.cpuPercent }?.take(3).orEmpty()
         if (top.isNotEmpty()) {
             item { SectionTitle("الأكثر استهلاكاً الآن") }

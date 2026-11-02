@@ -18,4 +18,25 @@ class AutoPrefs(ctx: Context) {
     var shortcuts: Boolean
         get() = p.getBoolean("shortcuts", false)
         set(v) { p.edit().putBoolean("shortcuts", v).apply() }
+
+    var games: Set<String>
+        get() = p.getStringSet("games", emptySet()) ?: emptySet()
+        set(v) { p.edit().putStringSet("games", v.toSet()).apply() }
+
+    var sessionStart: Long
+        get() = p.getLong("s_start", 0L)
+        set(v) { p.edit().putLong("s_start", v).apply() }
+    var sessionBattery: Int
+        get() = p.getInt("s_bat", -1)
+        set(v) { p.edit().putInt("s_bat", v).apply() }
+    var sessionTemp: Float
+        get() = p.getFloat("s_temp", 0f)
+        set(v) { p.edit().putFloat("s_temp", v).apply() }
+    var lastReport: String
+        get() = p.getString("last_report", "") ?: ""
+        set(v) { p.edit().putString("last_report", v).apply() }
+
+    var gamesInitialized: Boolean
+        get() = p.getBoolean("games_init", false)
+        set(v) { p.edit().putBoolean("games_init", v).apply() }
 }
