@@ -107,7 +107,7 @@ private fun SystemBars(dark: Boolean) {
     }
 }
 
-private enum class Screen { Main, Setup }
+private enum class Screen { Main, Setup, Assistant }
 private data class TabItem(val title: String, val icon: ImageVector)
 
 private val tabs = listOf(
@@ -126,6 +126,7 @@ fun AppRoot(vm: AppViewModel) {
     val message by vm.message.collectAsState()
     val busy by vm.busy.collectAsState()
     val snack = remember { SnackbarHostState() }
+    androidx.activity.compose.BackHandler(screen != Screen.Main) { screen = Screen.Main }
 
     LaunchedEffect(message) {
         message?.let {
@@ -156,11 +157,12 @@ fun AppRoot(vm: AppViewModel) {
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             when (screen) {
                 Screen.Setup -> SetupScreen(state, vm) { screen = Screen.Main }
+                Screen.Assistant -> AssistantScreen(vm) { screen = Screen.Main }
                 Screen.Main -> {
                     if (state != ShizukuState.Ready && tab != 4) ShizukuBanner(state, onGrant = { vm.requestPermission() }, onSetup = { screen = Screen.Setup })
                     Crossfade(targetState = tab, label = "tabs") { t ->
                         when (t) {
-                            0 -> HomeTab(vm)
+                            0 -> HomeTab(vm) { screen = Screen.Assistant }
                             1 -> TuneTab(vm)
                             2 -> AppsTab(vm)
                             3 -> HealthTab(vm)

@@ -56,6 +56,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+data class ChatMsg(val fromUser: Boolean, val text: String, val actions: List<com.example.perfcontrol.core.AdvisorAction> = emptyList())
+
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val shizuku = (app as com.example.perfcontrol.PerfApp).shizuku
     val shizukuState: StateFlow<ShizukuState> = shizuku.state
@@ -637,5 +639,66 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setThermalLimit(c: Int) {
         autoPrefs.thermalLimit = c
         thermalLimit.value = c
+    }
+
+    // ---- المساعد ----
+    val chat = MutableStateFlow<List<ChatMsg>>(emptyList())
+
+    private suspend fun buildSnapshot(): com.example.perfcontrol.core.DeviceSnapshot {
+        if (stats.value == null) refreshSample()
+        if (health.value == null) refreshHealth()
+        val st = stats.value
+        val ram = st?.let { 100 - (it.ramAvailMb * 100 / it.ramTotalMb.coerceAtLeast(1L)).toInt() } ?: 0
+        val sto = st?.let { (it.storageUsedGb * 100 / it.storageTotalGb.coerceAtLeast(0.1)).toInt() } ?: 0
+        return com.example.perfcontrol.core.DeviceSnapshot(
+            ramUsedPct = ram,
+            tempC = st?.tempC ?: 0f,
+            batteryPct = st?.batteryPercent ?: -1,
+            charging = st?.charging ?: false,
+            storageUsedPct = sto,
+            uptimeHours = uptimeHours.value,
+            heavyApps = heavy.value.map { device.label(it.packageName) },
+            shizukuReady = shizukuState.value == ShizukuState.Ready,
+            gameOn = gameEnabled.value,
+            powerSaveOn = powerSaveEnabled.value,
+            thermalGuardOn = thermalOn.value,
+        )
+    }
+
+    fun startChat() {
+        if (chat.value.isNotEmpty()) return
+        viewModelScope.launch {
+            val r = com.example.perfcontrol.core.Advisor.diagnose(buildSnapshot())
+            chat.value = listOf(
+                ChatMsg(false, "أهلاً! أنا مساعد الجهاز. أحلل حالة هاتفك وأقترح إجراءات تنفّذها بضغطة. اسألني عن البطء أو الحرارة أو البطارية أو الألعاب أو التخزين."),
+                ChatMsg(false, r.text, r.actions),
+            )
+        }
+    }
+
+    fun ask(question: String) {
+        val q = question.trim()
+        if (q.isEmpty()) return
+        chat.value = chat.value + ChatMsg(true, q)
+        viewModelScope.launch {
+            val r = com.example.perfcontrol.core.Advisor.answer(q, buildSnapshot())
+            chat.value = chat.value + ChatMsg(false, r.text, r.actions)
+        }
+    }
+
+    fun clearChat() {
+        chat.value = emptyList()
+        startChat()
+    }
+
+    fun runAdvisorAction(a: com.example.perfcontrol.core.AdvisorAction) {
+        when (a) {
+            com.example.perfcontrol.core.AdvisorAction.Boost -> boost(boostPlan())
+            com.example.perfcontrol.core.AdvisorAction.StopHeavy -> stopHeavy(heavy.value.map { it.packageName })
+            com.example.perfcontrol.core.AdvisorAction.GameMode -> if (!gameEnabled.value) toggleGame()
+            com.example.perfcontrol.core.AdvisorAction.PowerSave -> if (!powerSaveEnabled.value) togglePowerSave()
+            com.example.perfcontrol.core.AdvisorAction.Clean -> trimAll()
+            com.example.perfcontrol.core.AdvisorAction.ThermalGuard -> setThermal(true)
+        }
     }
 }

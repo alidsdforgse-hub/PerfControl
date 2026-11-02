@@ -27,7 +27,7 @@ import com.example.perfcontrol.core.ShizukuState
 import kotlinx.coroutines.delay
 
 @Composable
-fun HomeTab(vm: AppViewModel) {
+fun HomeTab(vm: AppViewModel, onAssistant: () -> Unit = {}) {
     val state by vm.shizukuState.collectAsState()
     val sample by vm.sample.collectAsState()
     val stats by vm.stats.collectAsState()
@@ -115,6 +115,11 @@ fun HomeTab(vm: AppViewModel) {
                     s?.let { "↑ ${it.txKbps} KB/s" } ?: "",
                     Modifier.weight(1f),
                 )
+            }
+        }
+        item {
+            androidx.compose.material3.FilledTonalButton(onClick = onAssistant, modifier = Modifier.fillMaxWidth()) {
+                Text("اسأل المساعد: ما حال جهازي؟")
             }
         }
         item { PrimaryButton("رفع الأداء الآن") { if (ready) showBoost = true else vm.needShizuku() } }
