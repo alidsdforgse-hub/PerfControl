@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         vm.refreshShizuku()
         vm.loadFallback()
+        vm.syncWatch()
     }
 }
 

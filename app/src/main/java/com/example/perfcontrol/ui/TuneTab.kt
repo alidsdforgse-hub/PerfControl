@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.unit.dp
 import com.example.perfcontrol.core.Verdict
@@ -35,6 +36,8 @@ fun TuneTab(vm: AppViewModel) {
     var benchPkg by remember { mutableStateOf<String?>(null) }
     val gameMin by vm.gameMinutes.collectAsState()
     val rates by vm.refreshRates.collectAsState()
+    val thermalOn by vm.thermalOn.collectAsState()
+    val thermalLimit by vm.thermalLimit.collectAsState()
     val cleanH by vm.cleanHours.collectAsState()
     val shortcuts by vm.shortcutsOn.collectAsState()
     val rows by vm.benchRows.collectAsState()
@@ -90,6 +93,22 @@ fun TuneTab(vm: AppViewModel) {
                     listOf(0, 6, 12, 24).indexOf(cleanH).takeIf { it >= 0 },
                     true,
                 ) { vm.setCleanHours(listOf(0, 6, 12, 24)[it]) }
+            }
+        }
+        item {
+            SoftCard {
+                Row(androidx.compose.ui.Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("حارس الحرارة", fontWeight = FontWeight.SemiBold)
+                        Caption("إذا بلغت حرارة البطارية الحد: يخفّض معدل التحديث إلى 60 ويوقف التطبيقات الثقيلة، ثم يعيد كل شيء بعد التبريد 4 درجات.")
+                    }
+                    androidx.compose.material3.Switch(checked = thermalOn, onCheckedChange = { vm.setThermal(it) }, enabled = ready)
+                }
+                ChoiceRow(
+                    listOf("40°", "42°", "44°", "46°"),
+                    listOf(40, 42, 44, 46).indexOf(thermalLimit).takeIf { it >= 0 },
+                    ready,
+                ) { vm.setThermalLimit(listOf(40, 42, 44, 46)[it]) }
             }
         }
         item {

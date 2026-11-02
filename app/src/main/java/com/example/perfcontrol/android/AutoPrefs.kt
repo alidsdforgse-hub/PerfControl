@@ -39,4 +39,19 @@ class AutoPrefs(ctx: Context) {
     var gamesInitialized: Boolean
         get() = p.getBoolean("games_init", false)
         set(v) { p.edit().putBoolean("games_init", v).apply() }
+
+    /** تشغيل وضع الألعاب تلقائياً عند فتح لعبة من القائمة */
+    var autoGame: Boolean
+        get() = p.getBoolean("auto_game", false)
+        set(v) { p.edit().putBoolean("auto_game", v).apply() }
+    /** عدم الإزعاج أثناء وضع الألعاب */
+    var gameDnd: Boolean
+        get() = p.getBoolean("game_dnd", false)
+        set(v) { p.edit().putBoolean("game_dnd", v).apply() }
+    var thermalGuard: Boolean
+        get() = p.getBoolean("thermal", false)
+        set(v) { p.edit().putBoolean("thermal", v).apply() }
+    var thermalLimit: Int
+        get() = p.getInt("thermal_limit", 42)
+        set(v) { p.edit().putInt("thermal_limit", v).apply() }
 }

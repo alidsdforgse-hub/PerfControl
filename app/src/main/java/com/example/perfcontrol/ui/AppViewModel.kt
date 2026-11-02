@@ -43,6 +43,8 @@ import com.example.perfcontrol.android.AutoPrefs
 import com.example.perfcontrol.background.AutoScheduler
 import com.example.perfcontrol.background.GameSession
 import com.example.perfcontrol.background.Shortcuts
+import com.example.perfcontrol.background.restoreThermal
+import com.example.perfcontrol.background.WatchService
 import com.example.perfcontrol.core.BenchRow
 import com.example.perfcontrol.core.BenchmarkRunner
 import com.example.perfcontrol.core.FreezeManager
@@ -227,9 +229,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleGame() = launchBusy {
         val p = protection()
         val booster = Booster(runner, ProcessManager(runner, p), cleaner, p)
-        val g = GameMode(runner, booster, store)
+        val g = GameMode(runner, booster, store, maxHz(), autoPrefs.gameDnd)
         if (!g.isEnabled()) disablePowerSaveIfActive()
         val r = if (g.isEnabled()) {
+            com.example.perfcontrol.background.BgActions.restoreThermal(runner, store)
             g.disable()
         } else {
             g.enable(sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName } ?: emptyList())
@@ -496,9 +499,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 try {
                     val p = protection()
                     val b = Booster(runner, ProcessManager(runner, p), cleaner, p)
-                    val g = GameMode(runner, b, store)
+                    val g = GameMode(runner, b, store, maxHz(), autoPrefs.gameDnd)
                     disablePowerSaveIfActive()
-                    val r = g.enable(sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName } ?: emptyList())
+                    val r = g.enable(
+                        sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName }
+                            ?.filter { it != pkg } ?: emptyList(),
+                    )
                     gameEnabled.value = g.isEnabled()
                     if (g.isEnabled()) {
                         AutoScheduler.startGameTimer(getApplication(), autoPrefs.gameMinutes)
@@ -520,5 +526,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 message.value = "تعذر فتح اللعبة"
             }
         }
+    }
+
+    // ---- Game Turbo وحارس الحرارة ----
+    private fun maxHz(): Int = refreshRates.value.maxOrNull() ?: 120
+
+    val autoGame = MutableStateFlow(autoPrefs.autoGame)
+    val gameDnd = MutableStateFlow(autoPrefs.gameDnd)
+    val thermalOn = MutableStateFlow(autoPrefs.thermalGuard)
+    val thermalLimit = MutableStateFlow(autoPrefs.thermalLimit)
+
+    fun syncWatch() = WatchService.sync(getApplication())
+
+    fun setAutoGame(on: Boolean) {
+        autoPrefs.autoGame = on
+        autoGame.value = on
+        syncWatch()
+        if (on && !official.hasUsageAccess()) message.value = "فعّل \"الوصول إلى بيانات الاستخدام\" لهذا التطبيق ليعرف متى تفتح اللعبة"
+    }
+
+    fun setGameDnd(on: Boolean) {
+        autoPrefs.gameDnd = on
+        gameDnd.value = on
+    }
+
+    fun setThermal(on: Boolean) {
+        autoPrefs.thermalGuard = on
+        thermalOn.value = on
+        syncWatch()
+    }
+
+    fun setThermalLimit(c: Int) {
+        autoPrefs.thermalLimit = c
+        thermalLimit.value = c
     }
 }

@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import com.example.perfcontrol.android.AutoPrefs
 import com.example.perfcontrol.android.PrefsStateStore
 import com.example.perfcontrol.core.GAME_ACTIVE_KEY
 import kotlinx.coroutines.CoroutineScope
@@ -69,7 +70,13 @@ class ActionReceiver : BroadcastReceiver() {
                     Shortcuts.ACTION_CLEAN -> BgActions.clean(app)
                     else -> null
                 }
-                if (msg != null) Shortcuts.show(app, msg)
+                if (msg != null) {
+                    if (AutoPrefs(app).shortcuts) Shortcuts.show(app, msg)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(app, msg, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                    PerfWidget.refresh(app)
+                }
             } catch (_: Exception) {
             } finally {
                 pending.finish()

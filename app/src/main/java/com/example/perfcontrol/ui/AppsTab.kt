@@ -188,6 +188,9 @@ fun GamesTab(vm: AppViewModel) {
     val detected by vm.detectedGames.collectAsState()
     val report by vm.lastReport.collectAsState()
     val gameOn by vm.gameEnabled.collectAsState()
+    val autoGame by vm.autoGame.collectAsState()
+    val dnd by vm.gameDnd.collectAsState()
+    val hasUsage by vm.hasUsageAccess.collectAsState()
     var editing by remember { mutableStateOf(false) }
     val ready = state == ShizukuState.Ready
 
@@ -211,6 +214,30 @@ fun GamesTab(vm: AppViewModel) {
             }
         }
         if (gameOn) item { PrimaryButton("إيقاف وضع الألعاب وعرض التقرير") { vm.toggleGame() } }
+        item {
+            ToggleCard(
+                "تشغيل تلقائي عند فتح اللعبة",
+                if (hasUsage) "يعمل وضع الألعاب وحده عند فتح أي لعبة من قائمتك، ويتوقف بعد خروجك منها بنصف دقيقة تقريباً."
+                else "يحتاج إذن \"الوصول إلى بيانات الاستخدام\". اضغط الزر أدناه لمنحه ثم فعّل الخيار.",
+                autoGame,
+                true,
+            ) { vm.setAutoGame(it) }
+        }
+        if (!hasUsage) {
+            item {
+                androidx.compose.material3.OutlinedButton(onClick = { vm.official.openUsageAccess() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("منح إذن بيانات الاستخدام")
+                }
+            }
+        }
+        item {
+            ToggleCard(
+                "عدم الإزعاج أثناء اللعب",
+                "يكتم الإشعارات والمكالمات غير المهمة أثناء وضع الألعاب ويعيدها بعده.",
+                dnd,
+                true,
+            ) { vm.setGameDnd(it) }
+        }
         if (report.isNotBlank()) {
             item {
                 SoftCard {

@@ -51,13 +51,15 @@ class SettingsApplier(
     }
 }
 
-private val GAME_SETTINGS = listOf(
-    SettingChange("global", "window_animation_scale", "0.5"),
-    SettingChange("global", "transition_animation_scale", "0.5"),
-    SettingChange("global", "animator_duration_scale", "0.5"),
-    SettingChange("system", "min_refresh_rate", "120"),
-    SettingChange("system", "peak_refresh_rate", "120"),
-)
+internal fun gameSettings(hz: Int, dnd: Boolean): List<SettingChange> = buildList {
+    add(SettingChange("global", "window_animation_scale", "0.5"))
+    add(SettingChange("global", "transition_animation_scale", "0.5"))
+    add(SettingChange("global", "animator_duration_scale", "0.5"))
+    add(SettingChange("system", "min_refresh_rate", "$hz"))
+    add(SettingChange("system", "peak_refresh_rate", "$hz"))
+    // 1 = المقاطعات المهمة فقط (عدم الإزعاج)
+    if (dnd) add(SettingChange("global", "zen_mode", "1"))
+}
 
 private val POWERSAVE_SETTINGS = listOf(
     SettingChange("global", "low_power", "1"),
@@ -74,7 +76,11 @@ class GameMode(
     runner: CommandRunner,
     private val booster: Booster,
     store: StateStore,
+    private val hz: Int = 120,
+    private val dnd: Boolean = false,
 ) {
+    private val GAME_SETTINGS get() = gameSettings(hz, dnd)
+    private val ALL_SETTINGS get() = gameSettings(hz, true)
     private val applier = SettingsApplier(runner, store, "game")
 
     fun isEnabled(): Boolean = applier.isActive()
@@ -95,7 +101,7 @@ class GameMode(
     }
 
     suspend fun disable(): GameModeResult {
-        val restored = applier.restore(GAME_SETTINGS)
+        val restored = applier.restore(ALL_SETTINGS)
         applier.markActive(false)
         return GameModeResult(true, "تم إيقاف وضع الألعاب وإعادة $restored إعداد")
     }
