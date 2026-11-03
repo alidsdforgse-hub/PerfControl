@@ -72,4 +72,9 @@ class AutoPrefs(ctx: Context) {
     var overlay: Boolean
         get() = p.getBoolean("overlay", false)
         set(v) { p.edit().putBoolean("overlay", v).apply() }
+
+    /** نسبة دقة الشاشة أثناء اللعب (100 = بدون تخفيض) */
+    var gameScale: Int
+        get() = p.getInt("game_scale", 100)
+        set(v) { p.edit().putInt("game_scale", v).apply() }
 }

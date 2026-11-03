@@ -16,7 +16,11 @@ import com.example.perfcontrol.alerts.AlertNotifier
 import com.example.perfcontrol.android.AutoPrefs
 import com.example.perfcontrol.android.PrefsStateStore
 import com.example.perfcontrol.android.StatsReader
+import com.example.perfcontrol.core.CommandResult
+import com.example.perfcontrol.core.CpuSample
+import com.example.perfcontrol.core.DisplayParsers
 import com.example.perfcontrol.core.GAME_ACTIVE_KEY
+import com.example.perfcontrol.core.ProcStatParser
 import com.example.perfcontrol.core.GameAction
 import com.example.perfcontrol.core.GameDetector
 import com.example.perfcontrol.core.ThermalAction
@@ -76,6 +80,7 @@ class WatchService : Service() {
         var autoStarted = false
         var throttled = false
         var retryAt = 0L
+        var prevCpu: CpuSample? = null
 
         while (currentCoroutineContext().isActive) {
             if (!prefs.autoGame && !prefs.thermalGuard && !prefs.overlay) {
@@ -113,7 +118,18 @@ class WatchService : Service() {
                         val st = stats.read()
                         val ram = 100 - (st.ramAvailMb * 100 / st.ramTotalMb.coerceAtLeast(1L)).toInt()
                         val clock = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())
-                        GameOverlay.show(ctx, "حرارة ${"%.1f".format(st.tempC)}°   بطارية ${st.batteryPercent}%   رام $ram%   $clock")
+                        var loads = ""
+                        val nr = BgActions.runnerNow(ctx)
+                        if (nr != null) {
+                            val cur = (nr.run("cat /proc/stat") as? CommandResult.Success)?.let { ProcStatParser.parse(it.output) }
+                            val pv = prevCpu
+                            if (cur != null && pv != null) loads += "CPU ${ProcStatParser.usagePercent(pv, cur).toInt()}%   "
+                            if (cur != null) prevCpu = cur
+                            val gpu = (nr.run("cat /sys/class/kgsl/kgsl-3d0/gpu_busy_percentage") as? CommandResult.Success)
+                                ?.let { DisplayParsers.gpuBusy(it.output) }
+                            if (gpu != null) loads += "GPU $gpu%   "
+                        }
+                        GameOverlay.show(ctx, "${loads}حرارة ${"%.1f".format(st.tempC)}°   بطارية ${st.batteryPercent}%   رام $ram%   $clock")
                     } else {
                         GameOverlay.hide(ctx)
                     }

@@ -5,6 +5,7 @@ import com.example.perfcontrol.PerfApp
 import com.example.perfcontrol.android.AutoPrefs
 import com.example.perfcontrol.android.DeviceInfo
 import com.example.perfcontrol.android.StatsReader
+import com.example.perfcontrol.core.DisplayScaler
 import com.example.perfcontrol.core.GameProfiles
 import com.example.perfcontrol.core.GameSessionReport
 import com.example.perfcontrol.core.PerfMode
@@ -29,6 +30,13 @@ import kotlinx.coroutines.delay
 object BgActions {
 
     suspend fun runnerFor(ctx: Context): ShizukuCommandRunner? = runner(ctx)
+
+    /** بدون انتظار: يعيد المنفّذ فقط إن كانت خدمة Shizuku متصلة الآن. */
+    fun runnerNow(ctx: Context): ShizukuCommandRunner? {
+        val hub = (ctx.applicationContext as PerfApp).shizuku
+        if (hub.currentService() == null) return null
+        return ShizukuCommandRunner({ hub.currentService() })
+    }
 
     private suspend fun runner(ctx: Context): ShizukuCommandRunner? {
         val hub = (ctx.applicationContext as PerfApp).shizuku
@@ -62,6 +70,7 @@ object BgActions {
         if (game.isEnabled() || forceOff) {
             if (!game.isEnabled()) return "وضع الألعاب متوقف أصلاً"
             restoreThermal(r, store)
+            DisplayScaler(r, store).resetIfActive()
             val msg = game.disable().message
             val report = GameSession.finish(ctx)
             return if (report != null) "$msg\n$report" else msg

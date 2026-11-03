@@ -270,12 +270,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (!g.isEnabled()) disablePowerSaveIfActive()
         val r = if (g.isEnabled()) {
             com.example.perfcontrol.background.BgActions.restoreThermal(runner, store)
+            com.example.perfcontrol.core.DisplayScaler(runner, store).resetIfActive()
             g.disable()
         } else {
             g.enable(sample.value?.processes?.sortedByDescending { it.rssKb }?.map { it.packageName } ?: emptyList())
         }
         gameEnabled.value = g.isEnabled()
         var extra = ""
+        if (g.isEnabled() && autoPrefs.gameScale < 100) {
+            val d = com.example.perfcontrol.core.DisplayScaler(runner, store).apply(autoPrefs.gameScale)
+            extra = "\n" + d.message
+        }
         if (g.isEnabled()) {
             AutoScheduler.startGameTimer(getApplication(), autoPrefs.gameMinutes)
             GameSession.start(getApplication())
@@ -547,6 +552,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (g.isEnabled()) {
                         AutoScheduler.startGameTimer(getApplication(), autoPrefs.gameMinutes)
                         GameSession.start(getApplication())
+                        if (autoPrefs.gameScale < 100) {
+                            com.example.perfcontrol.core.DisplayScaler(runner, store).apply(autoPrefs.gameScale)
+                            delay(800)
+                        }
                     }
                     message.value = r.message
                 } catch (e: Exception) {
@@ -700,5 +709,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             com.example.perfcontrol.core.AdvisorAction.Clean -> trimAll()
             com.example.perfcontrol.core.AdvisorAction.ThermalGuard -> setThermal(true)
         }
+    }
+
+    // ---- تخفيف الضغط ----
+    val gameScale = MutableStateFlow(autoPrefs.gameScale)
+
+    fun setGameScale(percent: Int) {
+        autoPrefs.gameScale = percent
+        gameScale.value = percent
+    }
+
+    fun resetDisplay() = launchBusy {
+        val r = com.example.perfcontrol.core.DisplayScaler(runner, store).reset()
+        message.value = r.message
     }
 }

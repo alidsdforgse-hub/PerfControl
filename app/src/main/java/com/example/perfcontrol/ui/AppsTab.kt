@@ -195,6 +195,7 @@ fun GamesTab(vm: AppViewModel) {
     val perGame by vm.perGame.collectAsState()
     val overlayOn by vm.overlayOn.collectAsState()
     val overlayPerm by vm.overlayPerm.collectAsState()
+    val scale by vm.gameScale.collectAsState()
     var editing by remember { mutableStateOf(false) }
     val ready = state == ShizukuState.Ready
 
@@ -227,9 +228,25 @@ fun GamesTab(vm: AppViewModel) {
             }
         }
         item {
+            SoftCard {
+                Text("تخفيف الضغط على المعالج وكرت الشاشة", fontWeight = FontWeight.SemiBold)
+                Caption("دقة الشاشة أثناء اللعب:")
+                ChoiceRow(
+                    listOf("100%", "90%", "80%", "70%"),
+                    listOf(100, 90, 80, 70).indexOf(scale).takeIf { it >= 0 },
+                    true,
+                ) { vm.setGameScale(listOf(100, 90, 80, 70)[it]) }
+                Caption("خفض الدقة يقلل حمل كرت الشاشة (GPU) والحرارة بشكل حقيقي، لكن الصورة تصبح أقل حدّة. يُطبَّق عند الضغط على \"العب\" أو تشغيل وضع الألعاب يدوياً (ولا يُطبَّق في التشغيل التلقائي حتى لا تُعاد تهيئة اللعبة وهي مفتوحة)، ويُعاد تلقائياً عند الإيقاف.")
+                Caption("لتخفيف المعالج (CPU): اختر وضع \"هادئ\" (60 هرتز) أو \"متوازن\"؛ تقليل معدل الإطارات يخفف عمل المعالج. لا أستطيع تغيير سرعة المعالج مباشرة لأن ذلك يحتاج صلاحية روت.")
+                androidx.compose.material3.OutlinedButton(onClick = { vm.resetDisplay() }, enabled = ready, modifier = Modifier.fillMaxWidth()) {
+                    Text("إعادة دقة الشاشة الأصلية (إن بقيت منخفضة)")
+                }
+            }
+        }
+        item {
             ToggleCard(
                 "شريط المعلومات أثناء اللعب",
-                if (overlayPerm) "يعرض الحرارة والبطارية والذاكرة والوقت أعلى الشاشة داخل اللعبة. لا يعرض FPS."
+                if (overlayPerm) "يعرض CPU وGPU (إن قرأهما الجهاز) والحرارة والبطارية والذاكرة والوقت أعلى الشاشة. لا يعرض FPS."
                 else "يحتاج إذن \"العرض فوق التطبيقات\". فعّل الخيار وسيفتح الإعداد.",
                 overlayOn,
                 true,
