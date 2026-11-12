@@ -16,7 +16,12 @@ import com.example.perfcontrol.alerts.AlertNotifier
 import com.example.perfcontrol.android.AutoPrefs
 import com.example.perfcontrol.android.PrefsStateStore
 import com.example.perfcontrol.android.StatsReader
+import com.example.perfcontrol.core.AppProfilePolicy
+import com.example.perfcontrol.core.ChargeAlertPolicy
 import com.example.perfcontrol.core.CommandResult
+import com.example.perfcontrol.core.ProfileAction
+import com.example.perfcontrol.core.SettingChange
+import com.example.perfcontrol.core.SettingsApplier
 import com.example.perfcontrol.core.CpuSample
 import com.example.perfcontrol.core.DisplayParsers
 import com.example.perfcontrol.core.GAME_ACTIVE_KEY
@@ -81,18 +86,58 @@ class WatchService : Service() {
         var throttled = false
         var retryAt = 0L
         var prevCpu: CpuSample? = null
+        var chargeNotified = false
+        var profileApplied: String? = null
 
         while (currentCoroutineContext().isActive) {
-            if (!prefs.autoGame && !prefs.thermalGuard && !prefs.overlay) {
+            if (!prefs.autoGame && !prefs.thermalGuard && !prefs.overlay && !prefs.chargeAlert && !prefs.appProfiles) {
                 stopSelf()
                 return
             }
             val now = System.currentTimeMillis()
             try {
-                if (prefs.autoGame) {
+                if (prefs.autoGame || prefs.appProfiles) {
                     val (newTop, q) = readTop(ctx, lastQuery)
                     lastQuery = q
                     if (newTop != null) lastTop = newTop
+                }
+                if (prefs.chargeAlert) {
+                    val st = stats.read()
+                    if (ChargeAlertPolicy.shouldReset(st.batteryPercent, st.charging, prefs.chargeLimit)) chargeNotified = false
+                    if (ChargeAlertPolicy.shouldNotify(st.batteryPercent, st.charging, prefs.chargeLimit, chargeNotified)) {
+                        chargeNotified = true
+                        AlertNotifier(ctx).notify(7004, "وصلت البطارية ${st.batteryPercent}%. افصل الشاحن لحماية البطارية.")
+                    }
+                }
+                if (prefs.appProfiles) {
+                    val gameOn = store.original(GAME_ACTIVE_KEY) != null
+                    val act = AppProfilePolicy.decide(lastTop, prefs.profiles(), profileApplied, gameOn)
+                    val nr = BgActions.runnerNow(ctx)
+                    if (nr != null && act !is ProfileAction.None) {
+                        val ap = SettingsApplier(nr, store, "appprof")
+                        val keys = listOf(SettingChange("system", "min_refresh_rate", "60"), SettingChange("system", "peak_refresh_rate", "60"))
+                        when (act) {
+                            is ProfileAction.Apply -> {
+                                ap.apply(listOf(
+                                    SettingChange("system", "min_refresh_rate", "${act.hz}"),
+                                    SettingChange("system", "peak_refresh_rate", "${act.hz}"),
+                                ))
+                                profileApplied = act.pkg
+                            }
+                            ProfileAction.Restore -> {
+                                ap.restore(keys)
+                                profileApplied = null
+                            }
+                            ProfileAction.None -> {}
+                        }
+                    }
+                } else if (profileApplied != null) {
+                    BgActions.runnerNow(ctx)?.let { SettingsApplier(it, store, "appprof").restore(
+                        listOf(SettingChange("system", "min_refresh_rate", "60"), SettingChange("system", "peak_refresh_rate", "60")),
+                    ) }
+                    profileApplied = null
+                }
+                if (prefs.autoGame) {
                     val games = prefs.games
                     val on = store.original(GAME_ACTIVE_KEY) != null
                     if (!on) autoStarted = false
@@ -189,7 +234,7 @@ class WatchService : Service() {
             val p = AutoPrefs(ctx)
             val i = Intent(ctx, WatchService::class.java)
             try {
-                if (p.autoGame || p.thermalGuard || p.overlay) ctx.startForegroundService(i) else ctx.stopService(i)
+                if (p.autoGame || p.thermalGuard || p.overlay || p.chargeAlert || p.appProfiles) ctx.startForegroundService(i) else ctx.stopService(i)
             } catch (_: Exception) {
             }
         }

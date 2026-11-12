@@ -31,7 +31,7 @@ fun AppsTab(vm: AppViewModel) {
     var sub by remember { mutableIntStateOf(0) }
     Column(Modifier.fillMaxSize()) {
         ScrollableTabRow(selectedTabIndex = sub, edgePadding = 0.dp, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
-            listOf("الألعاب", "العمليات", "الثقيلة", "الإقلاع", "التجميد", "الإشعارات").forEachIndexed { i, t ->
+            listOf("الألعاب", "العمليات", "الثقيلة", "الإقلاع", "التجميد", "الإشعارات", "الملفات").forEachIndexed { i, t ->
                 Tab(selected = sub == i, onClick = { sub = i }, text = { Text(t) })
             }
         }
@@ -41,7 +41,8 @@ fun AppsTab(vm: AppViewModel) {
             2 -> HeavyTab(vm)
             3 -> StartupTab(vm)
             4 -> FreezeTab(vm)
-            else -> ProtectTab(vm)
+            5 -> ProtectTab(vm)
+            else -> ProfilesTab(vm)
         }
     }
 }
@@ -319,6 +320,50 @@ fun GamesTab(vm: AppViewModel) {
                     a.pkg in games,
                     true,
                 ) { vm.toggleGameApp(a.pkg, it) }
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfilesTab(vm: AppViewModel) {
+    val apps by vm.allUserApps.collectAsState()
+    val profiles by vm.profiles.collectAsState()
+    val on by vm.appProfilesOn.collectAsState()
+    val hasUsage by vm.hasUsageAccess.collectAsState()
+    val rates by vm.refreshRates.collectAsState()
+    val ready = vm.shizukuState.collectAsState().value == ShizukuState.Ready
+
+    LaunchedEffect(Unit) { vm.loadGames() }
+
+    val sorted = apps.sortedWith(compareByDescending<com.example.perfcontrol.android.AppEntry> { it.pkg in profiles }.thenBy { it.label })
+
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = listPadding, verticalArrangement = listSpacing) {
+        item {
+            ToggleCard(
+                "ملفات تعريف التطبيقات",
+                "يضبط معدل التحديث تلقائياً لكل تطبيق: مثلاً 60 هرتز لتطبيقات القراءة والتواصل لتوفير البطارية، وبدون تغيير للباقي. يعيد إعدادك الأصلي عند مغادرة التطبيق. يحتاج Shizuku وإذن بيانات الاستخدام.",
+                on,
+                true,
+            ) { vm.setAppProfiles(it) }
+        }
+        if (!hasUsage) {
+            item {
+                androidx.compose.material3.OutlinedButton(onClick = { vm.official.openUsageAccess() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("منح إذن بيانات الاستخدام")
+                }
+            }
+        }
+        if (!ready) item { Caption("Shizuku غير جاهز: لن تُطبَّق الملفات حتى يجهز.") }
+        items(sorted, key = { "p_" + it.pkg }) { a ->
+            SoftCard {
+                Text(a.label, fontWeight = FontWeight.SemiBold)
+                val hz = profiles[a.pkg]
+                ChoiceRow(
+                    listOf("بدون") + rates.map { "$it" },
+                    if (hz == null) 0 else rates.indexOf(hz) + 1,
+                    true,
+                ) { vm.setProfile(a.pkg, if (it == 0) null else rates[it - 1]) }
             }
         }
     }

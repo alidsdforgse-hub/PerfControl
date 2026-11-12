@@ -77,4 +77,25 @@ class AutoPrefs(ctx: Context) {
     var gameScale: Int
         get() = p.getInt("game_scale", 100)
         set(v) { p.edit().putInt("game_scale", v).apply() }
+
+    var chargeAlert: Boolean
+        get() = p.getBoolean("charge_alert", false)
+        set(v) { p.edit().putBoolean("charge_alert", v).apply() }
+    var chargeLimit: Int
+        get() = p.getInt("charge_limit", 80)
+        set(v) { p.edit().putInt("charge_limit", v).apply() }
+
+    var appProfiles: Boolean
+        get() = p.getBoolean("app_profiles", false)
+        set(v) { p.edit().putBoolean("app_profiles", v).apply() }
+    /** pkg -> hz (غير موجود = بدون ملف) */
+    fun profiles(): Map<String, Int> =
+        p.all.filterKeys { it.startsWith("ap_") }.mapNotNull { (k, v) -> (v as? Int)?.takeIf { it > 0 }?.let { k.removePrefix("ap_") to it } }.toMap()
+    fun setProfile(pkg: String, hz: Int?) {
+        p.edit().apply { if (hz == null || hz <= 0) remove("ap_$pkg") else putInt("ap_$pkg", hz) }.apply()
+    }
+
+    var logEnabled: Boolean
+        get() = p.getBoolean("log_enabled", true)
+        set(v) { p.edit().putBoolean("log_enabled", v).apply() }
 }

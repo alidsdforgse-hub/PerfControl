@@ -622,7 +622,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val thermalOn = MutableStateFlow(autoPrefs.thermalGuard)
     val thermalLimit = MutableStateFlow(autoPrefs.thermalLimit)
 
+    fun syncLogger() = com.example.perfcontrol.background.PerfLogger.sync(getApplication())
+
     fun syncWatch() {
+        syncLogger()
         overlayPerm.value = android.provider.Settings.canDrawOverlays(getApplication())
         WatchService.sync(getApplication())
     }
@@ -722,5 +725,72 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun resetDisplay() = launchBusy {
         val r = com.example.perfcontrol.core.DisplayScaler(runner, store).reset()
         message.value = r.message
+    }
+
+    // ---- البطارية وملفات التطبيقات وسجل الأداء ----
+    val batteryDetail = MutableStateFlow<com.example.perfcontrol.android.BatteryDetail?>(null)
+    val batteryCapacity = MutableStateFlow<Int?>(null)
+    val chargeAlertOn = MutableStateFlow(autoPrefs.chargeAlert)
+    val chargeLimit = MutableStateFlow(autoPrefs.chargeLimit)
+    val appProfilesOn = MutableStateFlow(autoPrefs.appProfiles)
+    val profiles = MutableStateFlow(autoPrefs.profiles())
+    val logOn = MutableStateFlow(autoPrefs.logEnabled)
+    val logEntries = MutableStateFlow<List<com.example.perfcontrol.core.LogEntry>>(emptyList())
+
+    fun loadBattery() {
+        viewModelScope.launch {
+            batteryDetail.value = withContext(Dispatchers.IO) { com.example.perfcontrol.android.BatteryInfo.read(getApplication()) }
+            if (shizukuState.value == ShizukuState.Ready && batteryCapacity.value == null) {
+                val base = "/sys/class/power_supply/battery/"
+                val full = (runner.run("cat ${base}charge_full") as? com.example.perfcontrol.core.CommandResult.Success)
+                    ?.let { com.example.perfcontrol.core.BatteryHealthParser.firstNumber(it.output) }
+                val design = (runner.run("cat ${base}charge_full_design") as? com.example.perfcontrol.core.CommandResult.Success)
+                    ?.let { com.example.perfcontrol.core.BatteryHealthParser.firstNumber(it.output) }
+                batteryCapacity.value = com.example.perfcontrol.core.BatteryHealthParser.capacityPercent(full, design)
+            }
+        }
+    }
+
+    fun setChargeAlert(on: Boolean) {
+        autoPrefs.chargeAlert = on
+        chargeAlertOn.value = on
+        syncWatch()
+    }
+
+    fun setChargeLimit(v: Int) {
+        autoPrefs.chargeLimit = v
+        chargeLimit.value = v
+    }
+
+    fun setAppProfiles(on: Boolean) {
+        autoPrefs.appProfiles = on
+        appProfilesOn.value = on
+        syncWatch()
+        if (on && !official.hasUsageAccess()) message.value = "فعّل \"الوصول إلى بيانات الاستخدام\" لهذا التطبيق ليعرف التطبيق المفتوح"
+    }
+
+    fun setProfile(pkg: String, hz: Int?) {
+        autoPrefs.setProfile(pkg, hz)
+        profiles.value = autoPrefs.profiles()
+    }
+
+    fun setLogEnabled(on: Boolean) {
+        autoPrefs.logEnabled = on
+        logOn.value = on
+        com.example.perfcontrol.background.PerfLogger.sync(getApplication())
+    }
+
+    fun loadLog() {
+        viewModelScope.launch(Dispatchers.IO) {
+            com.example.perfcontrol.background.PerfLogStore.sampleNow(getApplication())
+            logEntries.value = com.example.perfcontrol.background.PerfLogStore.read(getApplication())
+        }
+    }
+
+    fun clearLog() {
+        viewModelScope.launch(Dispatchers.IO) {
+            com.example.perfcontrol.background.PerfLogStore.clear(getApplication())
+            logEntries.value = emptyList()
+        }
     }
 }
